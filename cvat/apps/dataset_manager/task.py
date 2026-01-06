@@ -128,7 +128,8 @@ class JobAnnotation:
 
         task_data_queryset = models.Data.objects.all()
         if prefetch_images:
-            task_data_queryset = task_data_queryset.select_related("video").prefetch_related(
+            task_data_queryset = task_data_queryset.prefetch_related(
+                "videos",
                 Prefetch("images", queryset=models.Image.objects.order_by("frame"))
             )
 

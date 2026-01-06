@@ -2969,6 +2969,14 @@ class PluginsSerializer(serializers.Serializer):
     MODELS = serializers.BooleanField()
     PREDICT = serializers.BooleanField()
 
+class MultiviewDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.MultiviewData
+        fields = ['id', 'session_id', 'part_number',
+                  'video_view1', 'video_view2', 'video_view3',
+                  'video_view4', 'video_view5']
+        read_only_fields = ['id']
+
 class DataMetaReadSerializer(serializers.ModelSerializer):
     frames = FrameMetaSerializer(many=True, allow_null=True)
     chapters = ChapterSerializer(many=True, allow_null=True, required=False)
@@ -3274,6 +3282,9 @@ class ShapeSerializer(serializers.Serializer):
 
 class SubLabeledShapeSerializer(ShapeSerializer, AnnotationSerializer):
     attributes = AttributeValSerializer(many=True, default=[])
+    view_id = serializers.IntegerField(required=False, allow_null=True)
+    description = serializers.CharField(required=False, allow_blank=True, default='')
+    needs_review = serializers.BooleanField(required=False, default=False)
 
 class LabeledShapeSerializer(SubLabeledShapeSerializer):
     elements = SubLabeledShapeSerializer(many=True, required=False)
@@ -3324,6 +3335,7 @@ class LabeledShapeSerializerFromDB(serializers.BaseSerializer):
             result = _convert_annotation(shape, [
                 'id', 'label_id', 'type', 'frame', 'group', 'source',
                 'occluded', 'outside', 'z_order', 'rotation', 'points',
+                'view_id', 'description', 'needs_review',
             ])
             result['attributes'] = _convert_attributes(shape['attributes'])
             if shape.get('elements', None) is not None and shape['parent'] is None:

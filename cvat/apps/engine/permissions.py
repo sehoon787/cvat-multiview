@@ -504,6 +504,7 @@ class TaskPermission(
     class Scopes(StrEnum):
         CREATE = 'create'
         CREATE_IN_PROJECT = 'create@project'
+        CREATE_MULTIVIEW = 'create_multiview'
         DELETE = 'delete'
         DELETE_ANNOTATIONS = 'delete:annotations'
         EXPORT_ANNOTATIONS = 'export:annotations'
@@ -624,6 +625,9 @@ class TaskPermission(
         scope = {
             ('list', 'GET'): Scopes.LIST,
             ('create', 'POST'): Scopes.CREATE,
+            ('create_multiview', 'POST'): Scopes.CREATE,
+            ('multiview_data', 'GET'): Scopes.VIEW_DATA,
+            ('serve_multiview_video', 'GET'): Scopes.VIEW_DATA,
             ('retrieve', 'GET'): Scopes.VIEW,
             ('status', 'GET'): Scopes.VIEW,
             ('partial_update', 'PATCH'): Scopes.UPDATE,

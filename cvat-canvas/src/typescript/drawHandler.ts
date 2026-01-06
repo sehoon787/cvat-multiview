@@ -37,6 +37,7 @@ export interface DrawHandler {
     draw(drawData: DrawData, geometry: Geometry): void;
     transform(geometry: Geometry): void;
     cancel(): void;
+    setViewId(viewId: number | null): void;
 }
 
 interface FinalCoordinates {
@@ -111,6 +112,7 @@ export class DrawHandlerImpl implements DrawHandler {
     private selectedShapeOpacity: number;
     private outlinedBorders: string;
     private isHidden: boolean;
+    private viewId: number | null;
 
     // we should use any instead of SVG.Shape because svg plugins cannot change declared interface
     // so, methods like draw() just undefined for SVG.Shape, but nevertheless they exist
@@ -363,12 +365,25 @@ export class DrawHandlerImpl implements DrawHandler {
     }
 
     private onDrawDone(...args: any[]): void {
+        // Inject viewId into the data object if multiview is active
+        if (args[0] && this.viewId !== null) {
+            const data = args[0];
+            if (!data.attributes) {
+                data.attributes = {};
+            }
+            data.attributes.view_id = this.viewId;
+        }
+
         if (this.drawData.onDrawDone) {
             this.drawData.onDrawDone.call(this, ...args);
             return;
         }
 
         this.onDrawDoneDefault.call(this, ...args);
+    }
+
+    public setViewId(viewId: number | null): void {
+        this.viewId = viewId;
     }
 
     private release(): void {
@@ -1295,6 +1310,7 @@ export class DrawHandlerImpl implements DrawHandler {
         this.crosshair = new Crosshair();
         this.drawInstance = null;
         this.pointsGroup = null;
+        this.viewId = null;
         this.cursorPosition = {
             x: 0,
             y: 0,

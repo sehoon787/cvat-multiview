@@ -408,8 +408,8 @@ class TaskExporter(_ExporterBase, _TaskBackupBase):
         super().__init__(logger=slogger.task[pk])
 
         self._db_task: models.Task = (
-            models.Task.objects.prefetch_related("data__images", "annotation_guide__assets")
-            .select_related("data__video", "data__validation_layout", "annotation_guide")
+            models.Task.objects.prefetch_related("data__images", "data__videos", "annotation_guide__assets")
+            .select_related("data__validation_layout", "annotation_guide")
             .get(pk=pk)
         )
 

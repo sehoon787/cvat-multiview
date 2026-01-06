@@ -244,6 +244,7 @@ export interface CanvasModel {
     readonly issueRegions: Record<number, { hidden: boolean; points: number[] }>;
     readonly objects: any[];
     readonly zLayer: number | null;
+    readonly viewId: number | null;
     readonly gridSize: Size;
     readonly focusData: FocusData;
     readonly activeElement: ActiveElement;
@@ -267,6 +268,7 @@ export interface CanvasModel {
 
     setup(frameData: any, objectStates: any[], zLayer: number): void;
     setupIssueRegions(issueRegions: Record<number, { hidden: boolean; points: number[] }>): void;
+    setViewId(viewId: number | null): void;
     activate(clientID: number | null, attributeID: number | null): void;
     highlight(clientIDs: number[], severity: HighlightSeverity): void;
     rotate(rotationAngle: number): void;
@@ -368,6 +370,7 @@ export class CanvasModelImpl extends MasterImpl implements CanvasModel {
         left: number;
         fittedScale: number;
         zLayer: number | null;
+        viewId: number | null;
         drawData: DrawData;
         editData: MasksEditData | PolyEditData;
         interactionData: InteractionData;
@@ -445,6 +448,7 @@ export class CanvasModelImpl extends MasterImpl implements CanvasModel {
             left: 0,
             fittedScale: 0,
             zLayer: null,
+            viewId: null,
             selected: null,
             mode: Mode.IDLE,
             exception: null,
@@ -1093,11 +1097,24 @@ export class CanvasModelImpl extends MasterImpl implements CanvasModel {
     }
 
     public get objects(): any[] {
+        let filteredObjects = this.data.objects;
+
+        // Filter by zLayer if set
         if (this.data.zLayer !== null) {
-            return this.data.objects.filter((object: any): boolean => object.zOrder <= this.data.zLayer);
+            filteredObjects = filteredObjects.filter((object: any): boolean => object.zOrder <= this.data.zLayer);
         }
 
-        return this.data.objects;
+        // Filter by viewId if set (for multiview workspace)
+        if (this.data.viewId !== null) {
+            filteredObjects = filteredObjects.filter((object: any): boolean => {
+                // Only show objects that match the current view, or objects without a viewId (legacy)
+                return object.attributes?.view_id === this.data.viewId ||
+                       object.attributes?.view_id === undefined ||
+                       object.attributes?.view_id === null;
+            });
+        }
+
+        return filteredObjects;
     }
 
     public get gridSize(): Size {
@@ -1158,6 +1175,15 @@ export class CanvasModelImpl extends MasterImpl implements CanvasModel {
 
     public get mode(): Mode {
         return this.data.mode;
+    }
+
+    public setViewId(viewId: number | null): void {
+        this.data.viewId = viewId;
+        this.notify(UpdateReasons.OBJECTS_UPDATED);
+    }
+
+    public get viewId(): number | null {
+        return this.data.viewId;
     }
 
     public get exception(): Error | null {

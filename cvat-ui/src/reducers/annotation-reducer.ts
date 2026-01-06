@@ -160,6 +160,10 @@ const defaultState: AnnotationState = {
     appearanceCollapsed: false,
     filtersPanelVisible: false,
     workspace: Workspace.STANDARD,
+    multiviewData: {
+        videos: null,
+        activeView: null,
+    },
 };
 
 export default (state = defaultState, action: AnyAction): AnnotationState => {
@@ -196,6 +200,7 @@ export default (state = defaultState, action: AnyAction): AnnotationState => {
                 groundTruthInstance,
                 groundTruthJobFramesMeta,
                 validationLayout,
+                multiviewData,
             } = action.payload;
 
             const defaultLabel = job.labels.length ? job.labels[0] : null;
@@ -215,6 +220,8 @@ export default (state = defaultState, action: AnyAction): AnnotationState => {
                     workspaceSelected = queryParameters.initialWorkspace;
                 }
                 workspaceSelected = workspaceSelected || (isReview ? Workspace.REVIEW : Workspace.STANDARD);
+            } else if (job.dimension === DimensionType.MULTIVIEW) {
+                workspaceSelected = Workspace.MULTIVIEW;
             } else {
                 workspaceSelected = Workspace.STANDARD3D;
                 activeShapeType = ShapeType.CUBOID;
@@ -277,9 +284,10 @@ export default (state = defaultState, action: AnyAction): AnnotationState => {
                 },
                 canvas: {
                     ...state.canvas,
-                    instance: job.dimension === DimensionType.DIMENSION_2D ? new Canvas() : new Canvas3d(),
+                    instance: job.dimension === DimensionType.DIMENSION_3D ? new Canvas3d() : new Canvas(),
                 },
                 colors,
+                multiviewData: multiviewData || state.multiviewData,
                 workspace: isReview && job.dimension === DimensionType.DIMENSION_2D ?
                     Workspace.REVIEW : workspaceSelected,
             };

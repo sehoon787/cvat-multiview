@@ -935,6 +935,16 @@ export interface AnnotationState {
     sidebarCollapsed: boolean;
     appearanceCollapsed: boolean;
     workspace: Workspace;
+    multiviewData: {
+        videos: {
+            view1: { url: string; fps: number };
+            view2: { url: string; fps: number };
+            view3: { url: string; fps: number };
+            view4: { url: string; fps: number };
+            view5: { url: string; fps: number };
+        } | null;
+        activeView: number | null;
+    };
 }
 
 export enum Workspace {
@@ -944,6 +954,7 @@ export enum Workspace {
     SINGLE_SHAPE = 'Single shape',
     TAGS = 'Tag annotation',
     REVIEW = 'Review',
+    MULTIVIEW = 'Multiview',
 }
 
 export enum GridColor {

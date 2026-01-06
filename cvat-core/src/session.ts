@@ -683,6 +683,22 @@ export class Job extends Session {
         return this.#data.dimension;
     }
 
+    public get isMultiview(): boolean {
+        return this.#data.dimension === 'multiview';
+    }
+
+    public async getMultiviewData(): Promise<any | null> {
+        if (!this.isMultiview) {
+            return null;
+        }
+
+        // TODO: Implement actual API call using serverProxy module
+        // const response = await serverProxy.tasks.getMultiviewData(this.#data.task_id);
+        // return response;
+
+        throw new ScriptingError('Multiview data fetching not yet implemented');
+    }
+
     public get parentJobId(): number | null {
         return this.#data.parent_job_id;
     }

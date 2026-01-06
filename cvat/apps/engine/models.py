@@ -49,6 +49,7 @@ class SafeCharField(models.CharField):
 class DimensionType(str, Enum):
     DIM_3D = '3d'
     DIM_2D = '2d'
+    MULTIVIEW = 'multiview'
 
     @classmethod
     def choices(cls):
@@ -319,7 +320,7 @@ class Data(models.Model):
     deleted_frames = IntArrayField(store_sorted=True, unique_values=True)
 
     images: models.manager.RelatedManager[Image]
-    video: MaybeUndefined[Video]
+    videos: models.manager.RelatedManager[Video]
     related_files: models.manager.RelatedManager[RelatedFile]
     validation_layout: MaybeUndefined[ValidationLayout]
 
@@ -414,12 +415,31 @@ class Data(models.Model):
     def validation_mode(self) -> ValidationMode | None:
         return getattr(getattr(self, 'validation_layout', None), 'mode', None)
 
+    @property
+    def video(self) -> Video | None:
+        """Backward compatibility: return first video for non-multiview tasks"""
+        return self.videos.first() if self.videos.exists() else None
+
 
 class Video(models.Model):
-    data = models.OneToOneField(Data, on_delete=models.CASCADE, related_name="video", null=True)
+    data = models.ForeignKey(Data, on_delete=models.CASCADE, related_name="videos", null=True)
     path = models.CharField(max_length=1024, default='')
     width = models.PositiveIntegerField()
     height = models.PositiveIntegerField()
+
+    class Meta:
+        default_permissions = ()
+
+
+class MultiviewData(models.Model):
+    data = models.OneToOneField(Data, on_delete=models.CASCADE, related_name="multiview_data")
+    video_view1 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view1")
+    video_view2 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view2")
+    video_view3 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view3")
+    video_view4 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view4")
+    video_view5 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view5")
+    session_id = models.CharField(max_length=64)
+    part_number = models.IntegerField()
 
     class Meta:
         default_permissions = ()
@@ -633,7 +653,7 @@ class Task(TimestampedModel, AssignableModel, FileSystemRelatedModel):
     data = models.ForeignKey(
         Data, on_delete=models.CASCADE, null=True, related_name="tasks", related_query_name="task"
     )
-    dimension = models.CharField(max_length=2, choices=DimensionType.choices(), default=DimensionType.DIM_2D)
+    dimension = models.CharField(max_length=16, choices=DimensionType.choices(), default=DimensionType.DIM_2D)
     subset = models.CharField(max_length=64, blank=True, default="")
     organization = models.ForeignKey('organizations.Organization', null=True, default=None,
         blank=True, on_delete=models.SET_NULL, related_name="tasks", related_query_name="task")
@@ -1206,6 +1226,9 @@ class LabeledImageAttributeVal(AttributeVal):
 
 class LabeledShape(Annotation, Shape):
     parent = models.ForeignKey('self', on_delete=models.DO_NOTHING, null=True, related_name='elements')
+    view_id = models.PositiveSmallIntegerField(null=True, default=None)
+    description = models.TextField(blank=True, default='')
+    needs_review = models.BooleanField(default=False)
 
 class LabeledShapeAttributeVal(AttributeVal):
     shape = models.ForeignKey(LabeledShape, on_delete=models.DO_NOTHING,

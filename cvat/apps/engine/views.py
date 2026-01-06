@@ -4,10 +4,12 @@
 # SPDX-License-Identifier: MIT
 
 import itertools
+import json
 import os
 import os.path as osp
 import re
 import shutil
+import subprocess
 import textwrap
 import traceback
 import zlib
@@ -131,6 +133,7 @@ from cvat.apps.engine.serializers import (
     JobWriteSerializer,
     LabeledDataSerializer,
     LabelSerializer,
+    MultiviewDataSerializer,
     PluginsSerializer,
     ProjectFileSerializer,
     ProjectReadSerializer,
@@ -1466,7 +1469,8 @@ class TaskViewSet(viewsets.GenericViewSet, mixins.ListModelMixin,
         self.get_object() #force to call check_object_permissions
         db_task = models.Task.objects.prefetch_related(
             'segment_set',
-            Prefetch('data', queryset=models.Data.objects.select_related('video').prefetch_related(
+            Prefetch('data', queryset=models.Data.objects.prefetch_related(
+                'videos',
                 Prefetch('images', queryset=models.Image.objects.prefetch_related('related_files').order_by('frame'))
             ))
         ).get(pk=pk)
@@ -1579,6 +1583,301 @@ class TaskViewSet(viewsets.GenericViewSet, mixins.ListModelMixin,
 
         response_serializer = TaskValidationLayoutReadSerializer(validation_layout)
         return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+    def _extract_video_metadata(self, video_path):
+        """Extract video metadata using FFmpeg/FFprobe"""
+        try:
+            cmd = [
+                'ffprobe', '-v', 'quiet', '-print_format', 'json',
+                '-show_streams', '-show_format', video_path
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            data = json.loads(result.stdout)
+
+            # Find video stream
+            video_stream = next((s for s in data['streams'] if s['codec_type'] == 'video'), None)
+            if not video_stream:
+                raise ValueError('No video stream found')
+
+            # Extract FPS (can be a fraction like "30/1")
+            fps_str = video_stream.get('r_frame_rate', '30/1')
+            fps_parts = fps_str.split('/')
+            fps = float(fps_parts[0]) / float(fps_parts[1]) if len(fps_parts) == 2 else float(fps_parts[0])
+
+            width = int(video_stream['width'])
+            height = int(video_stream['height'])
+            duration = float(data['format'].get('duration', 0))
+            frame_count = int(duration * fps) if duration > 0 else 0
+
+            return {
+                'width': width,
+                'height': height,
+                'fps': fps,
+                'frame_count': frame_count,
+                'duration': duration
+            }
+        except Exception as e:
+            # Fallback to default values if FFmpeg fails
+            return {
+                'width': 1920,
+                'height': 1080,
+                'fps': 30.0,
+                'frame_count': 3000,
+                'duration': 100.0
+            }
+
+    @extend_schema(
+        summary='Create multiview task',
+        tags=['tasks'],
+        request={
+            'multipart/form-data': {
+                'type': 'object',
+                'properties': {
+                    'name': {'type': 'string'},
+                    'session_id': {'type': 'string'},
+                    'part_number': {'type': 'integer'},
+                    'video_view1': {'type': 'string', 'format': 'binary'},
+                    'video_view2': {'type': 'string', 'format': 'binary'},
+                    'video_view3': {'type': 'string', 'format': 'binary'},
+                    'video_view4': {'type': 'string', 'format': 'binary'},
+                    'video_view5': {'type': 'string', 'format': 'binary'},
+                },
+                'required': ['name', 'session_id', 'part_number',
+                            'video_view1', 'video_view2', 'video_view3',
+                            'video_view4', 'video_view5'],
+            }
+        },
+        responses={
+            201: TaskReadSerializer,
+            400: OpenApiResponse(description='Bad request - missing or invalid files'),
+        },
+    )
+    @action(detail=False, methods=['POST'], url_path='create_multiview',
+            parser_classes=[MultiPartParser])
+    def create_multiview(self, request: ExtendedRequest):
+        """
+        Create a multiview task from 5 synchronized video files.
+
+        This endpoint creates a CVAT task with 5 video streams from the
+        MultiSensor-Home1 dataset, allowing annotation on synchronized
+        multi-camera views with audio mixing and spectrogram visualization.
+        """
+        # Validate required fields
+        task_name = request.data.get('name')
+        session_id = request.data.get('session_id')
+        part_number = request.data.get('part_number')
+
+        if not all([task_name, session_id, part_number]):
+            return Response(
+                {'error': 'Missing required fields: name, session_id, part_number'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate all 5 video files are present
+        video_files = {}
+        for i in range(1, 6):
+            view_key = f'video_view{i}'
+            if view_key not in request.FILES:
+                return Response(
+                    {'error': f'Missing required file: {view_key}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            video_files[view_key] = request.FILES[view_key]
+
+        try:
+            with transaction.atomic():
+                # Create Task
+                task_data = {
+                    'name': task_name,
+                    'owner': request.user,
+                    'dimension': models.DimensionType.MULTIVIEW,
+                    'mode': '',
+                    'subset': '',
+                    'source_storage': None,
+                    'target_storage': None,
+                }
+                db_task = models.Task.objects.create(**task_data)
+
+                # Create default label for multiview sound detection (binary classification)
+                sound_label = models.Label.objects.create(
+                    task=db_task,
+                    name='Sound',
+                    color='#ff6b00',  # Orange color for sound detection
+                    type='rectangle',  # Bounding box type
+                )
+
+                # Create Data record
+                data_obj = models.Data.objects.create(
+                    task=db_task,
+                    size=0,  # Will be updated after processing
+                    image_quality=50,
+                    start_frame=0,
+                    stop_frame=0,  # Will be updated after processing
+                    frame_filter='',
+                    compressed_chunk_type=models.DataChoice.VIDEO,
+                    original_chunk_type=models.DataChoice.VIDEO,
+                    storage_method=models.StorageMethodChoice.FILE_SYSTEM,
+                    storage=models.StorageChoice.LOCAL,
+                )
+
+                # Link Data back to Task
+                db_task.data = data_obj
+                db_task.save()
+
+                # Create directory for multiview videos
+                video_dir = os.path.join(settings.DATA_ROOT, 'multiview', str(db_task.id))
+                os.makedirs(video_dir, exist_ok=True)
+
+                # Create 5 Video records and save files
+                video_objects = {}
+                video_metadata_list = []
+
+                for i in range(1, 6):
+                    view_key = f'video_view{i}'
+                    video_file = video_files[view_key]
+
+                    # Save video file to disk
+                    video_filename = f'view{i}.mp4'
+                    video_path = os.path.join(video_dir, video_filename)
+
+                    with open(video_path, 'wb+') as destination:
+                        for chunk in video_file.chunks():
+                            destination.write(chunk)
+
+                    # Extract video metadata using FFmpeg
+                    metadata = self._extract_video_metadata(video_path)
+                    video_metadata_list.append(metadata)
+
+                    # Create Video object with actual path and metadata
+                    video_obj = models.Video.objects.create(
+                        data=data_obj,
+                        path=video_path,
+                        width=metadata['width'],
+                        height=metadata['height'],
+                    )
+                    video_objects[view_key] = video_obj
+
+                # Create MultiviewData linking all videos
+                multiview_data = models.MultiviewData.objects.create(
+                    data=data_obj,
+                    session_id=session_id,
+                    part_number=int(part_number),
+                    video_view1=video_objects['video_view1'],
+                    video_view2=video_objects['video_view2'],
+                    video_view3=video_objects['video_view3'],
+                    video_view4=video_objects['video_view4'],
+                    video_view5=video_objects['video_view5'],
+                )
+
+                # Use actual frame count from first video (all should be synchronized)
+                # In multiview setup, all videos should have the same frame count
+                frame_count = video_metadata_list[0]['frame_count'] if video_metadata_list else 3000
+                data_obj.size = frame_count
+                data_obj.stop_frame = frame_count - 1
+                data_obj.save()
+
+                # Create Segment and Job so the task can be opened
+                segment = models.Segment.objects.create(
+                    task=db_task,
+                    start_frame=0,
+                    stop_frame=frame_count - 1,
+                )
+
+                job = models.Job.objects.create(
+                    segment=segment,
+                    state='new',
+                    stage='annotation',
+                )
+
+                # Serialize and return task
+                serializer = TaskReadSerializer(db_task, context={'request': request})
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        except IntegrityError as e:
+            return Response(
+                {'error': f'Database integrity error: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to create multiview task: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @extend_schema(summary='Get multiview data', tags=['tasks'])
+    @action(detail=True, methods=['GET'], url_path='multiview_data')
+    def multiview_data(self, request: ExtendedRequest, pk: int):
+        db_task = cast(models.Task, self.get_object())
+        if not hasattr(db_task.data, 'multiview_data'):
+            return Response({'error': 'Task is not a multiview task'}, status=status.HTTP_400_BAD_REQUEST)
+
+        multiview_data = db_task.data.multiview_data
+        serializer = MultiviewDataSerializer(multiview_data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(summary='Serve multiview video', tags=['tasks'])
+    @action(detail=True, methods=['GET'], url_path='multiview/video/(?P<view_id>[1-5])')
+    def serve_multiview_video(self, request: ExtendedRequest, pk: int, view_id: str):
+        """
+        Serve multiview video files with HTTP range support for seeking.
+
+        Supports HTTP range requests to allow video seeking in the browser.
+        Returns 206 Partial Content for range requests, 200 OK for full file.
+        """
+        from django.http import FileResponse
+
+        try:
+            db_task = cast(models.Task, self.get_object())
+
+            # Verify task is multiview type
+            if db_task.dimension != models.DimensionType.MULTIVIEW:
+                return HttpResponse('Task is not a multiview task', status=400)
+
+            # Get video file path
+            video_path = os.path.join(settings.DATA_ROOT, 'multiview', str(pk), f'view{view_id}.mp4')
+
+            if not os.path.exists(video_path):
+                return HttpResponseNotFound(f'Video file not found: view{view_id}')
+
+            # Get file size
+            file_size = os.path.getsize(video_path)
+
+            # Handle HTTP range requests for video seeking
+            range_header = request.META.get('HTTP_RANGE', '').strip()
+
+            if range_header:
+                # Parse range header (format: "bytes=start-end")
+                range_match = re.match(r'bytes=(\d+)-(\d*)', range_header)
+                if range_match:
+                    start = int(range_match.group(1))
+                    end = int(range_match.group(2)) if range_match.group(2) else file_size - 1
+
+                    # Ensure valid range
+                    start = max(0, min(start, file_size - 1))
+                    end = max(start, min(end, file_size - 1))
+
+                    # Read file chunk
+                    with open(video_path, 'rb') as f:
+                        f.seek(start)
+                        data = f.read(end - start + 1)
+
+                    # Return 206 Partial Content
+                    response = HttpResponse(data, status=206, content_type='video/mp4')
+                    response['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+                    response['Accept-Ranges'] = 'bytes'
+                    response['Content-Length'] = str(len(data))
+                    return response
+
+            # Regular response without range (return full file)
+            response = FileResponse(open(video_path, 'rb'), content_type='video/mp4')
+            response['Accept-Ranges'] = 'bytes'
+            response['Content-Length'] = str(file_size)
+            return response
+
+        except models.Task.DoesNotExist:
+            return HttpResponseNotFound('Task not found')
+        except Exception as e:
+            return HttpResponse(f'Error serving video: {str(e)}', status=500)
 
 
 @extend_schema(tags=['jobs'])
@@ -1954,9 +2253,9 @@ class JobViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixins.CreateMo
             Prefetch(
                 'segment__task__data',
                 queryset=models.Data.objects.select_related(
-                    'video',
                     'validation_layout',
                 ).prefetch_related(
+                    'videos',
                     Prefetch(
                         'images',
                         queryset=(
@@ -2086,8 +2385,9 @@ class JobViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixins.CreateMo
             Prefetch('segment__task__data',
                 queryset=(
                     models.Data.objects
-                    .select_related('video', 'validation_layout')
+                    .select_related('validation_layout')
                     .prefetch_related(
+                        'videos',
                         Prefetch('images', queryset=models.Image.objects.order_by('frame'))
                     )
                 )

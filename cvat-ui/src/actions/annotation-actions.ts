@@ -12,7 +12,7 @@ import {
 } from 'cvat-canvas-wrapper';
 import {
     getCore, MLModel, JobType, Job, QualityConflict,
-    ObjectState, ObjectType, ShapeType, JobState, JobValidationLayout,
+    ObjectState, ObjectType, ShapeType, JobState, JobValidationLayout, DimensionType,
 } from 'cvat-core-wrapper';
 import logger, { EventScope } from 'cvat-logger';
 import { getCVATStore } from 'cvat-store';
@@ -1002,6 +1002,37 @@ export function getJobAsync({
 
             await job.logger.log(EventScope.loadJob, { duration: Date.now() - start });
 
+            // Load multiview data if job is multiview type
+            let multiviewData = null;
+            if (job.dimension === DimensionType.MULTIVIEW) {
+                // Construct video URLs for all 5 views
+                multiviewData = {
+                    videos: {
+                        view1: {
+                            url: `/api/tasks/${taskID}/multiview/video/1`,
+                            fps: 30, // Will be updated from metadata if available
+                        },
+                        view2: {
+                            url: `/api/tasks/${taskID}/multiview/video/2`,
+                            fps: 30,
+                        },
+                        view3: {
+                            url: `/api/tasks/${taskID}/multiview/video/3`,
+                            fps: 30,
+                        },
+                        view4: {
+                            url: `/api/tasks/${taskID}/multiview/video/4`,
+                            fps: 30,
+                        },
+                        view5: {
+                            url: `/api/tasks/${taskID}/multiview/video/5`,
+                            fps: 30,
+                        },
+                    },
+                    activeView: 1,
+                };
+            }
+
             const openTime = Date.now();
             dispatch({
                 type: AnnotationActionTypes.GET_JOB_SUCCESS,
@@ -1022,6 +1053,7 @@ export function getJobAsync({
                     frameData,
                     colors,
                     filters,
+                    multiviewData,
                 },
             });
 
