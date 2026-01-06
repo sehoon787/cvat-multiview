@@ -431,6 +431,7 @@ export interface SerializedShape {
     rotation: number;
     z_order: number;
     type: ShapeType;
+    view_id?: number | null;
 }
 
 export interface SerializedTrack {

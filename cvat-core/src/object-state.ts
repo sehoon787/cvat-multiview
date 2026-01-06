@@ -52,6 +52,7 @@ export interface SerializedData {
     keyframe?: boolean;
     rotation?: number;
     descriptions?: string[];
+    viewId?: number | null;
     keyframes?: {
         prev: number | null;
         next: number | null;
@@ -102,6 +103,7 @@ export default class ObjectState {
     public attributes: Record<number, string>;
     public descriptions: string[];
     public elements: ObjectState[];
+    public viewId: number | null;
 
     constructor(serialized: SerializedData) {
         if (!isEnum.call(ObjectType, serialized.objectType)) {
@@ -179,6 +181,7 @@ export default class ObjectState {
             frame: serialized.frame,
             objectType: serialized.objectType,
             shapeType: serialized.shapeType || null,
+            viewId: serialized.viewId ?? null,
             updateFlags,
         };
 
@@ -212,6 +215,12 @@ export default class ObjectState {
                 },
                 parentID: {
                     get: () => data.parentID,
+                },
+                viewId: {
+                    get: () => data.viewId,
+                    set: (viewId: number | null) => {
+                        data.viewId = viewId;
+                    },
                 },
                 label: {
                     get: () => data.label,

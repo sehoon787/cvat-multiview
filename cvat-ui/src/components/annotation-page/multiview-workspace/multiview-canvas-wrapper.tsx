@@ -93,9 +93,9 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
         state.outside = state.outside || false;
         state.hidden = state.hidden || false;
 
-        // Add viewId attribute to track which view this annotation belongs to
+        // Set viewId to track which view this annotation belongs to
         state.attributes = state.attributes || {};
-        state.description = `viewId:${refs.activeViewId}`;
+        state.viewId = refs.activeViewId;
 
         const objectState = new cvat.classes.ObjectState(state);
         dispatch(createAnnotationsAsync([objectState]));
@@ -211,8 +211,9 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
                 workspace: stateRefs.current.workspace,
                 exclude: [ObjectType.TAG],
             }).filter((state: ObjectState) => {
-                const desc = state.description || '';
-                return desc.includes(`viewId:${stateRefs.current.activeViewId}`) || !desc.includes('viewId:');
+                // Filter by viewId: show annotations for current view or annotations without viewId
+                const stateViewId = (state as any).viewId;
+                return stateViewId === stateRefs.current.activeViewId || stateViewId === null || stateViewId === undefined;
             });
 
             canvasInstance.setup(stateRefs.current.frameData, filteredAnnotations, stateRefs.current.curZLayer);
@@ -255,8 +256,9 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
             workspace,
             exclude: [ObjectType.TAG],
         }).filter((state: ObjectState) => {
-            const desc = state.description || '';
-            return desc.includes(`viewId:${activeViewId}`) || !desc.includes('viewId:');
+            // Filter by viewId: show annotations for current view or annotations without viewId
+            const stateViewId = (state as any).viewId;
+            return stateViewId === activeViewId || stateViewId === null || stateViewId === undefined;
         });
 
         canvasInstance.setup(frameData, filteredAnnotations, curZLayer);
