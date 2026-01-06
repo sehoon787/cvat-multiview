@@ -299,6 +299,7 @@ export interface CanvasModel {
 }
 
 const defaultData = {
+    mode: Mode.IDLE,
     drawData: {
         enabled: false,
     },

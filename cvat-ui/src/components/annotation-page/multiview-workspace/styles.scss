@@ -2,6 +2,10 @@
 //
 // SPDX-License-Identifier: MIT
 
+// Import base styles and standard workspace controls sidebar styles
+@import 'base';
+@import '../standard-workspace/styles.scss';
+
 .cvat-multiview-workspace {
     width: 100%;
     height: 100%;
@@ -78,9 +82,43 @@
                 width: 100%;
                 height: 100%;
                 pointer-events: none;
+                z-index: 5;
 
                 &.active-canvas {
                     pointer-events: all;
+                }
+
+                // Override cvat-canvas wrapper styles for multiview
+                #cvat_canvas_wrapper {
+                    width: 100% !important;
+                    height: 100% !important;
+                    margin: 0 !important;
+                    background-color: transparent !important;
+                }
+
+                // Make canvas background transparent
+                #cvat_canvas_background {
+                    display: none !important;
+                }
+
+                // SVG canvas elements
+                #cvat_canvas_content {
+                    background: transparent !important;
+                }
+
+                // Hide grid in multiview
+                #cvat_canvas_grid {
+                    display: none !important;
+                }
+
+                // Text content layer
+                #cvat_canvas_text_content {
+                    background: transparent !important;
+                }
+
+                // Bitmap container (for masks)
+                #cvat_canvas_bitmap {
+                    background: transparent !important;
                 }
             }
 

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import Layout from 'antd/lib/layout';
 
@@ -18,11 +18,14 @@ import PropagateConfirmComponent from 'components/annotation-page/standard-works
 import MultiviewVideoGrid from './multiview-video-grid';
 import SpectrogramPanel from './spectrogram-panel';
 import MultiviewObjectsList from './multiview-objects-list';
+import MultiviewCanvasWrapper from './multiview-canvas-wrapper';
 import './styles.scss';
 
 export default function MultiviewWorkspace(): JSX.Element {
     const [activeView, setActiveView] = useState<number>(1);
     const [audioEngine, setAudioEngine] = useState<any>(null);
+    const [canvasContainer, setCanvasContainer] = useState<HTMLDivElement | null>(null);
+    const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
     const lastFrameRef = useRef<number>(-1);
 
     const dispatch = useDispatch();
@@ -103,6 +106,15 @@ export default function MultiviewWorkspace(): JSX.Element {
         }, 100);
     };
 
+    // Handle canvas container ready callback from active view
+    const handleCanvasContainerReady = useCallback((
+        container: HTMLDivElement | null,
+        video: HTMLVideoElement | null,
+    ): void => {
+        setCanvasContainer(container);
+        setVideoElement(video);
+    }, []);
+
     return (
         <Layout hasSider className='cvat-multiview-workspace'>
             <ControlsSideBarContainer />
@@ -110,6 +122,7 @@ export default function MultiviewWorkspace(): JSX.Element {
                 <MultiviewVideoGrid
                     activeView={activeView}
                     onViewSelect={setActiveView}
+                    onCanvasContainerReady={handleCanvasContainerReady}
                 />
                 <SpectrogramPanel
                     audioEngine={audioEngine}
@@ -121,6 +134,11 @@ export default function MultiviewWorkspace(): JSX.Element {
             <CanvasPointContextMenuComponent />
             <RemoveConfirmComponent />
             <PropagateConfirmComponent />
+            <MultiviewCanvasWrapper
+                canvasContainer={canvasContainer}
+                videoElement={videoElement}
+                activeViewId={activeView}
+            />
         </Layout>
     );
 }

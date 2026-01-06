@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 
 interface Props {
     viewId: number;
@@ -11,14 +11,29 @@ interface Props {
     fps: number;
     isActive: boolean;
     playing: boolean;
+    onCanvasContainerReady?: (container: HTMLDivElement | null, videoElement: HTMLVideoElement | null) => void;
 }
 
 export default function VideoCanvas(props: Props): JSX.Element {
     const {
-        viewId, frameNumber, videoUrl, fps, isActive, playing,
+        viewId, frameNumber, videoUrl, fps, isActive, playing, onCanvasContainerReady,
     } = props;
 
     const videoRef = useRef<HTMLVideoElement>(null);
+
+    // Use callback ref to notify parent immediately when DOM element is ready
+    const canvasContainerCallbackRef = useCallback((node: HTMLDivElement | null) => {
+        if (onCanvasContainerReady) {
+            onCanvasContainerReady(node, videoRef.current);
+        }
+    }, [onCanvasContainerReady, isActive, viewId]);
+
+    // Cleanup when becoming inactive
+    useEffect(() => {
+        if (!isActive && onCanvasContainerReady) {
+            onCanvasContainerReady(null, null);
+        }
+    }, [isActive, onCanvasContainerReady]);
 
     // Sync video to frame number when not playing
     useEffect(() => {
@@ -57,6 +72,12 @@ export default function VideoCanvas(props: Props): JSX.Element {
                 crossOrigin="anonymous"
                 muted
             />
+            {isActive && (
+                <div
+                    ref={canvasContainerCallbackRef}
+                    className='annotation-canvas-overlay active-canvas'
+                />
+            )}
             <div className='view-label'>
                 View {viewId}
                 {isActive && <span className='active-indicator'> (Active)</span>}
