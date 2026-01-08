@@ -564,14 +564,14 @@ export class CanvasModelImpl extends MasterImpl implements CanvasModel {
             frameData.deleted === this.data.imageIsDeleted &&
             !this.data.configuration.forceFrameUpdate
         ) {
+            const objectsChanged = this.data.objects !== objectStates;
             this.data.zLayer = zLayer;
             this.data.objects = objectStates;
-            if (this.data.image) {
-                // display objects only if there is a drawn image
-                // if there is not, UpdateReasons.OBJECTS_UPDATED will be triggered after image is set
-                // it covers cases when annotations are changed while image is being received from the server
-                // e.g. with UI buttons (lock, unlock), shortcuts, delete/restore frames,
-                // and anytime when a list of objects updated in cvat-ui
+            if (this.data.image || objectsChanged) {
+                // display objects if there is a drawn image OR if objects have changed
+                // For standard mode: notify when image exists
+                // For multiview mode with video overlay: image is null but we still need
+                // to update objects on the canvas when they change (e.g., deletion, updates)
                 this.notify(UpdateReasons.OBJECTS_UPDATED);
             }
             return;
@@ -1118,9 +1118,9 @@ export class CanvasModelImpl extends MasterImpl implements CanvasModel {
         if (this.data.viewId !== null) {
             filteredObjects = filteredObjects.filter((object: any): boolean => {
                 // Only show objects that match the current view, or objects without a viewId (legacy)
-                return object.attributes?.view_id === this.data.viewId ||
-                       object.attributes?.view_id === undefined ||
-                       object.attributes?.view_id === null;
+                // viewId is stored as a direct property on the object, not in attributes
+                const objViewId = object.viewId;
+                return objViewId === this.data.viewId || objViewId === undefined || objViewId === null;
             });
         }
 
