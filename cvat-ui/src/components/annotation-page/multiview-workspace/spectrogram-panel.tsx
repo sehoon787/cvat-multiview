@@ -9,7 +9,7 @@ import Progress from 'antd/lib/progress';
 import { LoadingOutlined } from '@ant-design/icons';
 
 import { CombinedState } from 'reducers';
-import { changeFrameAsync } from 'actions/annotation-actions';
+import { changeFrameAsync, switchPlay } from 'actions/annotation-actions';
 import { MultiviewAudioEngine } from './audio-engine';
 
 interface Props {
@@ -33,6 +33,7 @@ export default function SpectrogramPanel(props: Props): JSX.Element {
 
     const dispatch = useDispatch();
     const frameNumber = useSelector((state: CombinedState) => state.annotation.player.frame.number);
+    const playing = useSelector((state: CombinedState) => state.annotation.player.playing);
     const job = useSelector((state: CombinedState) => state.annotation.job.instance);
 
     const fps = 30; // TODO: Get actual FPS from job metadata
@@ -234,8 +235,9 @@ export default function SpectrogramPanel(props: Props): JSX.Element {
 
     /**
      * Handle canvas click for seeking
+     * If playing, pause first, seek, then resume playback
      */
-    const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+    const handleCanvasClick = async (e: React.MouseEvent<HTMLCanvasElement>): Promise<void> => {
         const canvas = canvasRef.current;
         if (!canvas || !job || !spectrogramData) return;
 
@@ -243,8 +245,26 @@ export default function SpectrogramPanel(props: Props): JSX.Element {
         const x = e.clientX - rect.left;
         const seekTime = (x / rect.width) * duration;
         const targetFrame = Math.floor(seekTime * fps) + job.startFrame;
+        const clampedFrame = Math.min(targetFrame, job.stopFrame);
 
-        dispatch(changeFrameAsync(Math.min(targetFrame, job.stopFrame)));
+        const wasPlaying = playing;
+
+        // If playing, pause first to allow proper seeking
+        if (wasPlaying) {
+            dispatch(switchPlay(false));
+            // Small delay to let pause take effect
+            await new Promise((resolve) => { setTimeout(resolve, 50); });
+        }
+
+        // Seek to target frame
+        await dispatch(changeFrameAsync(clampedFrame));
+
+        // Resume playback if it was playing before
+        if (wasPlaying) {
+            // Small delay to let frame change take effect
+            await new Promise((resolve) => { setTimeout(resolve, 100); });
+            dispatch(switchPlay(true));
+        }
     };
 
     /**
