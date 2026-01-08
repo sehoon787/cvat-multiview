@@ -21,6 +21,36 @@
     }
 }
 
+.multiview-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background-color: #2a2a2a;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+
+    .playback-rate-label {
+        color: #fff;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .playback-rate-select {
+        width: 80px;
+
+        .ant-select-selector {
+            background-color: #333 !important;
+            border-color: #444 !important;
+            color: #fff !important;
+        }
+
+        .ant-select-arrow {
+            color: #fff;
+        }
+    }
+}
+
 .multiview-grid {
     flex: 1;
     display: flex;
@@ -28,15 +58,17 @@
     gap: 8px;
     padding: 8px;
     background-color: #1e1e1e;
-    overflow: hidden;
+    overflow-y: auto;
+    min-height: 0;
 
     .multiview-grid-row {
-        flex: 1;
+        flex: 0 0 auto;
+        min-height: 180px;
         display: flex;
         gap: 8px;
 
         &.single {
-            max-height: 33%;
+            max-height: 250px;
         }
     }
 

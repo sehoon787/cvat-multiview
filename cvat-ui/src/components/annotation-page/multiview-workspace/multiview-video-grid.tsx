@@ -11,11 +11,13 @@ import VideoCanvas from './video-canvas';
 interface Props {
     activeView: number;
     onViewSelect: (view: number) => void;
+    playbackRate?: number;
     onCanvasContainerReady?: (container: HTMLDivElement | null, videoElement: HTMLVideoElement | null) => void;
+    onVideoRef?: (viewId: number, video: HTMLVideoElement | null) => void;
 }
 
 export default function MultiviewVideoGrid(props: Props): JSX.Element {
-    const { activeView, onViewSelect, onCanvasContainerReady } = props;
+    const { activeView, onViewSelect, playbackRate, onCanvasContainerReady, onVideoRef } = props;
 
     const frameNumber = useSelector((state: CombinedState) => state.annotation.player.frame.number);
     const playing = useSelector((state: CombinedState) => state.annotation.player.playing);
@@ -52,7 +54,9 @@ export default function MultiviewVideoGrid(props: Props): JSX.Element {
                         fps={multiviewData.videos.view1.fps}
                         isActive={activeView === 1}
                         playing={playing}
+                        playbackRate={playbackRate}
                         onCanvasContainerReady={activeView === 1 ? onCanvasContainerReady : undefined}
+                        onVideoRef={onVideoRef}
                     />
                 </div>
                 <div
@@ -69,7 +73,9 @@ export default function MultiviewVideoGrid(props: Props): JSX.Element {
                         fps={multiviewData.videos.view2.fps}
                         isActive={activeView === 2}
                         playing={playing}
+                        playbackRate={playbackRate}
                         onCanvasContainerReady={activeView === 2 ? onCanvasContainerReady : undefined}
+                        onVideoRef={onVideoRef}
                     />
                 </div>
             </div>
@@ -88,7 +94,9 @@ export default function MultiviewVideoGrid(props: Props): JSX.Element {
                         fps={multiviewData.videos.view3.fps}
                         isActive={activeView === 3}
                         playing={playing}
+                        playbackRate={playbackRate}
                         onCanvasContainerReady={activeView === 3 ? onCanvasContainerReady : undefined}
+                        onVideoRef={onVideoRef}
                     />
                 </div>
                 <div
@@ -105,7 +113,9 @@ export default function MultiviewVideoGrid(props: Props): JSX.Element {
                         fps={multiviewData.videos.view4.fps}
                         isActive={activeView === 4}
                         playing={playing}
+                        playbackRate={playbackRate}
                         onCanvasContainerReady={activeView === 4 ? onCanvasContainerReady : undefined}
+                        onVideoRef={onVideoRef}
                     />
                 </div>
             </div>
@@ -124,7 +134,9 @@ export default function MultiviewVideoGrid(props: Props): JSX.Element {
                         fps={multiviewData.videos.view5.fps}
                         isActive={activeView === 5}
                         playing={playing}
+                        playbackRate={playbackRate}
                         onCanvasContainerReady={activeView === 5 ? onCanvasContainerReady : undefined}
+                        onVideoRef={onVideoRef}
                     />
                 </div>
             </div>

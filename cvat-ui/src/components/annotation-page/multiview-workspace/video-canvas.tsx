@@ -11,15 +11,25 @@ interface Props {
     fps: number;
     isActive: boolean;
     playing: boolean;
+    playbackRate?: number;
     onCanvasContainerReady?: (container: HTMLDivElement | null, videoElement: HTMLVideoElement | null) => void;
+    onVideoRef?: (viewId: number, video: HTMLVideoElement | null) => void;
 }
 
 export default function VideoCanvas(props: Props): JSX.Element {
     const {
-        viewId, frameNumber, videoUrl, fps, isActive, playing, onCanvasContainerReady,
+        viewId, frameNumber, videoUrl, fps, isActive, playing, playbackRate, onCanvasContainerReady, onVideoRef,
     } = props;
 
     const videoRef = useRef<HTMLVideoElement>(null);
+
+    // Use callback ref to report video element to parent when mounted
+    const videoCallbackRef = useCallback((node: HTMLVideoElement | null) => {
+        (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = node;
+        if (onVideoRef) {
+            onVideoRef(viewId, node);
+        }
+    }, [viewId, onVideoRef]);
 
     // Use callback ref to notify parent immediately when DOM element is ready
     const canvasContainerCallbackRef = useCallback((node: HTMLDivElement | null) => {
@@ -35,42 +45,18 @@ export default function VideoCanvas(props: Props): JSX.Element {
         }
     }, [isActive, onCanvasContainerReady]);
 
-    // Sync video to frame number when not playing
-    useEffect(() => {
-        if (videoRef.current && fps > 0 && !playing) {
-            const video = videoRef.current;
-            const targetTime = frameNumber / fps;
-
-            // Only seek if difference is significant (> 100ms)
-            if (Math.abs(video.currentTime - targetTime) > 0.1) {
-                video.currentTime = targetTime;
-            }
-        }
-    }, [frameNumber, fps, playing]);
-
-    // Handle play/pause based on playing state
-    useEffect(() => {
-        const video = videoRef.current;
-        if (!video) return;
-
-        if (playing) {
-            video.play().catch((error) => {
-                console.warn('Video play failed:', error);
-            });
-        } else {
-            video.pause();
-        }
-    }, [playing]);
+    // ALL video control (play/pause/seek) is handled by parent component
+    // This component only renders the video element
 
     return (
         <div className='video-canvas-container'>
             <video
-                ref={videoRef}
+                ref={videoCallbackRef}
                 src={videoUrl}
                 className='multiview-video'
                 playsInline
                 crossOrigin="anonymous"
-                muted
+                muted={!isActive}
             />
             {isActive && (
                 <div

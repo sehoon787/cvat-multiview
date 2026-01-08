@@ -288,6 +288,12 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
             return stateViewId === activeViewId || stateViewId === null || stateViewId === undefined;
         });
 
+        // Debug: Log annotation count and viewIds
+        if (annotations.length > 0) {
+            console.log(`[MultiviewCanvas] Frame ${frameNumber}, View ${activeViewId}: ${filteredAnnotations.length}/${annotations.length} annotations`,
+                annotations.map((a: any) => ({ clientID: a.clientID, viewId: a.viewId, frame: a.frame })));
+        }
+
         canvasInstance.setup(frameData, filteredAnnotations, curZLayer);
     }, [canvasInstance, frameData, annotations, curZLayer, activeViewId, frameNumber, workspace]);
 
