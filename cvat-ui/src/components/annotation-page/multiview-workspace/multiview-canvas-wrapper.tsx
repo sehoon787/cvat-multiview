@@ -13,6 +13,8 @@ import {
     updateActiveControl as updateActiveControlAction,
     confirmCanvasReadyAsync,
     resetCanvas,
+    activateObject,
+    updateAnnotationsAsync,
 } from 'actions/annotation-actions';
 import { filterAnnotations } from 'utils/filter-annotations';
 
@@ -54,6 +56,7 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
     const activeObjectType = useSelector((state: CombinedState) => state.annotation.drawing.activeObjectType);
     const curZLayer = useSelector((state: CombinedState) => state.annotation.annotations.zLayer.cur);
     const workspace = useSelector((state: CombinedState) => state.annotation.workspace);
+    const activatedStateID = useSelector((state: CombinedState) => state.annotation.annotations.activatedStateID);
 
     // Use refs for values that change frequently but shouldn't cause remount
     const stateRefs = useRef({
@@ -66,6 +69,7 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
         curZLayer,
         frameData,
         workspace,
+        activatedStateID,
     });
 
     // Update refs when values change
@@ -80,8 +84,9 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
             curZLayer,
             frameData,
             workspace,
+            activatedStateID,
         };
-    }, [activeLabelID, activeObjectType, frameNumber, activeViewId, jobInstance, annotations, curZLayer, frameData, workspace]);
+    }, [activeLabelID, activeObjectType, frameNumber, activeViewId, jobInstance, annotations, curZLayer, frameData, workspace, activatedStateID]);
 
     /**
      * Handle shape drawn event - create annotation with viewId
@@ -178,6 +183,82 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
     }, [dispatch]);
 
     /**
+     * Handle canvas shape clicked - scroll sidebar to show the clicked item
+     */
+    const onCanvasShapeClicked = useCallback((e: any): void => {
+        const { clientID, parentID } = e.detail.state;
+        let sidebarItem = null;
+        if (Number.isInteger(parentID)) {
+            sidebarItem = window.document.getElementById(`cvat-objects-sidebar-state-item-element-${clientID}`);
+        } else {
+            sidebarItem = window.document.getElementById(`cvat-objects-sidebar-state-item-${clientID}`);
+        }
+
+        if (sidebarItem) {
+            sidebarItem.scrollIntoView();
+        }
+    }, []);
+
+    /**
+     * Handle canvas shape deactivated
+     */
+    const onCanvasShapeDeactivated = useCallback((e: any): void => {
+        const refs = stateRefs.current;
+        const { state } = e.detail;
+
+        // Only deactivate if the deactivated state was the active one
+        if (state.clientID === refs.activatedStateID) {
+            dispatch(activateObject(null, null, null));
+        }
+    }, [dispatch]);
+
+    /**
+     * Handle mouse down on canvas - deactivate current object when clicking empty area
+     */
+    const onCanvasMouseDown = useCallback((e: MouseEvent): void => {
+        const refs = stateRefs.current;
+        if ((e.target as HTMLElement).tagName === 'svg' && e.button !== 2) {
+            if (refs.activatedStateID !== null) {
+                dispatch(activateObject(null, null, null));
+            }
+        }
+    }, [dispatch]);
+
+    /**
+     * Handle cursor moved on canvas - activate object under cursor
+     */
+    const onCanvasCursorMoved = useCallback(async (event: any): Promise<void> => {
+        const refs = stateRefs.current;
+
+        if (!refs.jobInstance || !canvasInstance) {
+            return;
+        }
+
+        const result = await refs.jobInstance.annotations.select(
+            event.detail.states,
+            event.detail.x,
+            event.detail.y,
+        );
+
+        if (result && result.state) {
+            const newActivatedElement = event.detail.activatedElementID || null;
+            if (refs.activatedStateID !== result.state.clientID) {
+                dispatch(activateObject(result.state.clientID, newActivatedElement, null));
+            }
+        }
+    }, [canvasInstance, dispatch]);
+
+    /**
+     * Handle canvas edit done - update annotation
+     */
+    const onCanvasEditDone = useCallback((event: any): void => {
+        const { state, points, rotation } = event.detail;
+        state.points = points;
+        state.rotation = rotation;
+        dispatch(updateAnnotationsAsync([state]));
+    }, [dispatch]);
+
+    /**
      * Mount canvas to container - only depends on container and canvas instance
      */
     useEffect(() => {
@@ -233,6 +314,11 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
         canvasHTML.addEventListener('canvas.zoomstop', onCanvasZoomDone);
         canvasHTML.addEventListener('canvas.dragstart', onCanvasDragStart);
         canvasHTML.addEventListener('canvas.dragstop', onCanvasDragDone);
+        canvasHTML.addEventListener('canvas.clicked', onCanvasShapeClicked);
+        canvasHTML.addEventListener('canvas.deactivated', onCanvasShapeDeactivated);
+        canvasHTML.addEventListener('canvas.moved', onCanvasCursorMoved as EventListener);
+        canvasHTML.addEventListener('canvas.editdone', onCanvasEditDone);
+        canvasHTML.addEventListener('mousedown', onCanvasMouseDown);
 
         // Setup ResizeObserver to handle container resize with debouncing
         // to prevent excessive fitCanvas calls that can clear annotations
@@ -274,6 +360,11 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
             canvasHTML.removeEventListener('canvas.zoomstop', onCanvasZoomDone);
             canvasHTML.removeEventListener('canvas.dragstart', onCanvasDragStart);
             canvasHTML.removeEventListener('canvas.dragstop', onCanvasDragDone);
+            canvasHTML.removeEventListener('canvas.clicked', onCanvasShapeClicked);
+            canvasHTML.removeEventListener('canvas.deactivated', onCanvasShapeDeactivated);
+            canvasHTML.removeEventListener('canvas.moved', onCanvasCursorMoved as EventListener);
+            canvasHTML.removeEventListener('canvas.editdone', onCanvasEditDone);
+            canvasHTML.removeEventListener('mousedown', onCanvasMouseDown);
 
             // Disconnect resize observer
             if (resizeObserverRef.current) {
@@ -283,7 +374,7 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
 
             mountedRef.current = false;
         };
-    }, [canvasContainer, canvasInstance, activeViewId, onCanvasShapeDrawn, onCanvasSetup, onCanvasCancel, onCanvasZoomStart, onCanvasZoomDone, onCanvasDragStart, onCanvasDragDone]);
+    }, [canvasContainer, canvasInstance, activeViewId, onCanvasShapeDrawn, onCanvasSetup, onCanvasCancel, onCanvasZoomStart, onCanvasZoomDone, onCanvasDragStart, onCanvasDragDone, onCanvasShapeClicked, onCanvasShapeDeactivated, onCanvasCursorMoved, onCanvasEditDone, onCanvasMouseDown]);
 
     /**
      * Setup canvas with frame data when frame or annotations change
