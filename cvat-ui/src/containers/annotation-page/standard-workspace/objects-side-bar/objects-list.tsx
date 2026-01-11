@@ -336,10 +336,12 @@ class ObjectsListContainer extends React.PureComponent<Props, State> {
         this.updateObjects();
     }
 
-    public componentDidUpdate(): void {
-        const { objectStates } = this.props;
+    public componentDidUpdate(prevProps: Props): void {
+        const { objectStates, frameNumber } = this.props;
         const { objectStates: prevObjectStates } = this.state;
-        if (objectStates !== prevObjectStates) {
+        // Re-filter when objectStates OR frameNumber changes
+        // frameNumber change is important for SHAPE annotations which only exist on specific frames
+        if (objectStates !== prevObjectStates || frameNumber !== prevProps.frameNumber) {
             this.updateObjects();
         }
     }

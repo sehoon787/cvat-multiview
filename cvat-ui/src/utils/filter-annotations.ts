@@ -39,6 +39,14 @@ export function filterAnnotations(annotations: ObjectState[], params: FilterAnno
             return false;
         }
 
+        // SHAPE annotations only exist on a single frame
+        // Filter out SHAPEs that don't belong to the current frame
+        if (objectState.objectType === ObjectType.SHAPE && frame !== undefined) {
+            if (objectState.frame !== frame) {
+                return false;
+            }
+        }
+
         // GT tracks are shown only on GT frames in annotation jobs
         if (meta && job && workspace === Workspace.REVIEW && groundTruthJobFramesMeta?.includedFrames && frame) {
             if (objectState.objectType === ObjectType.TRACK && objectState.isGroundTruth) {
