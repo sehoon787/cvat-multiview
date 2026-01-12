@@ -1036,6 +1036,7 @@ export default class Collection {
 
     public put(objectStates: ObjectState[]): number[] {
         checkObjectType('shapes for put', objectStates, null, { cls: Array, name: 'Array' });
+
         const constructed = {
             shapes: [],
             tracks: [],

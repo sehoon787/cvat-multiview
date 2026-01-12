@@ -283,6 +283,12 @@ async function fetchAnnotations(predefinedFrame?: number): Promise<{
 
     const fetchFrame = typeof predefinedFrame === 'undefined' ? frame : predefinedFrame;
     let states = await jobInstance.annotations.get(fetchFrame, showAllInterpolationTracks, filters);
+
+    // Debug logging for SHAPE/TRACK verification
+    const shapesCount = states.filter((s: any) => s.objectType === 'shape').length;
+    const tracksCount = states.filter((s: any) => s.objectType === 'track').length;
+    console.log(`[fetchAnnotations] frame=${fetchFrame}, shapes=${shapesCount}, tracks=${tracksCount}`);
+
     const [minZ, maxZ] = computeZRange(states);
 
     if (jobInstance.type === JobType.GROUND_TRUTH) {
@@ -698,7 +704,8 @@ export function changeFrameAsync(
                 return;
             }
 
-            if (!isAbleToChangeFrame(toFrame) || statisticsVisible || propagateVisible) {
+            const canChangeFrame = isAbleToChangeFrame(toFrame);
+            if (!canChangeFrame || statisticsVisible || propagateVisible) {
                 return;
             }
 
@@ -739,6 +746,10 @@ export function changeFrameAsync(
             const {
                 states, maxZ, minZ, history,
             } = await fetchAnnotations(toFrame);
+
+            // Debug logging for frame change
+            console.log(`[changeFrameAsync] Frame ${frame} -> ${toFrame}, fetched ${states.length} annotations`);
+
             dispatch({
                 type: AnnotationActionTypes.CHANGE_FRAME_SUCCESS,
                 payload: {
@@ -1206,8 +1217,16 @@ export function updateAnnotationsAsync(statesToUpdate: any[]): ThunkAction {
 export function createAnnotationsAsync(statesToCreate: any[]): ThunkAction {
     return async (dispatch: ThunkDispatch): Promise<void> => {
         try {
-            const { jobInstance } = receiveAnnotationsParameters();
+            const { jobInstance, frame } = receiveAnnotationsParameters();
+
+            // Debug logging for SHAPE creation
+            console.log(`[createAnnotationsAsync] Creating ${statesToCreate.length} annotation(s), current Redux frame=${frame}`);
+            statesToCreate.forEach((s, i) => {
+                console.log(`[createAnnotationsAsync] [${i}] frame=${s.frame}, objectType=${s.objectType}, viewId=${s.viewId}`);
+            });
+
             await jobInstance.annotations.put(statesToCreate);
+            console.log('[createAnnotationsAsync] put() completed, dispatching fetchAnnotationsAsync()');
             dispatch(fetchAnnotationsAsync());
         } catch (error) {
             dispatch({

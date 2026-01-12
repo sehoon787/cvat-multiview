@@ -28,5 +28,7 @@ export default function isAbleToChangeFrame(frame?: number): boolean {
         frameInTheJob = frame >= job.startFrame && frame <= job.stopFrame;
     }
 
-    return canvas.isAbleToChangeFrame() && frameInTheJob && !state.annotation.player.navigationBlocked;
+    const canvasAbleToChange = canvas.isAbleToChangeFrame();
+    const navigationBlocked = state.annotation.player.navigationBlocked;
+    return canvasAbleToChange && frameInTheJob && !navigationBlocked;
 }

@@ -132,11 +132,14 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
         // issues with non-integer attribute IDs.
         state.viewId = refs.activeViewId;
 
+        // Debug logging for SHAPE creation verification
+        console.log(`[onCanvasShapeDrawn] frame=${refs.frameNumber}, viewId=${refs.activeViewId}, objectType=${state.objectType}, shapeType=${state.shapeType}`);
+
         try {
             const objectState = new cvat.classes.ObjectState(state);
             dispatch(createAnnotationsAsync([objectState]));
         } catch (error) {
-            console.error('[MultiviewCanvas] Failed to create annotation:', error);
+            // Error handling for failed annotation creation
         }
     }, [canvasInstance, dispatch]);
 
@@ -340,9 +343,13 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
                 workspace: stateRefs.current.workspace,
                 exclude: [ObjectType.TAG],
             }).filter((state: ObjectState) => {
-                // Filter by viewId: show annotations for current view or annotations without viewId
+                // Filter by viewId: show annotations for current view only
+                // Annotations without viewId are shown only in View 1 (for backward compatibility)
                 const stateViewId = (state as any).viewId;
-                return stateViewId === stateRefs.current.activeViewId || stateViewId === null || stateViewId === undefined;
+                if (stateViewId === null || stateViewId === undefined) {
+                    return stateRefs.current.activeViewId === 1;
+                }
+                return stateViewId === stateRefs.current.activeViewId;
             });
 
             canvasInstance.setup(stateRefs.current.frameData, filteredAnnotations, stateRefs.current.curZLayer);
@@ -390,16 +397,14 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
             workspace,
             exclude: [ObjectType.TAG],
         }).filter((state: ObjectState) => {
-            // Filter by viewId: show annotations for current view or annotations without viewId
+            // Filter by viewId: show annotations for current view only
+            // Annotations without viewId are shown only in View 1 (for backward compatibility)
             const stateViewId = (state as any).viewId;
-            return stateViewId === activeViewId || stateViewId === null || stateViewId === undefined;
+            if (stateViewId === null || stateViewId === undefined) {
+                return activeViewId === 1;
+            }
+            return stateViewId === activeViewId;
         });
-
-        // Debug: Log annotation count and viewIds
-        if (annotations.length > 0) {
-            console.log(`[MultiviewCanvas] Frame ${frameNumber}, View ${activeViewId}: ${filteredAnnotations.length}/${annotations.length} annotations`,
-                annotations.map((a: any) => ({ clientID: a.clientID, viewId: a.viewId, frame: a.frame })));
-        }
 
         canvasInstance.setup(frameData, filteredAnnotations, curZLayer);
     }, [canvasInstance, frameData, annotations, curZLayer, activeViewId, frameNumber, workspace]);
