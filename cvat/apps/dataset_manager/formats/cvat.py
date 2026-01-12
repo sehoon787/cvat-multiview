@@ -1185,11 +1185,17 @@ def dump_as_cvat_interpolation(dumper, annotations: CommonData | ProjectData):
         element_shapes = {}
         for element_track in track.elements:
             for element_shape in element_track.shapes:
+                # Only include keyframe element shapes
+                if not element_shape.keyframe:
+                    continue
                 if element_shape.frame not in element_shapes:
                     element_shapes[element_shape.frame] = []
                 element_shapes[element_shape.frame].append((element_shape, element_track.label))
 
         for shape in track.shapes:
+            # Only export keyframes, not interpolated frames
+            if not shape.keyframe:
+                continue
             dump_shape(shape, element_shapes)
 
         dumper.close_track()
