@@ -1636,15 +1636,19 @@ class TaskViewSet(viewsets.GenericViewSet, mixins.ListModelMixin,
                     'name': {'type': 'string'},
                     'session_id': {'type': 'string'},
                     'part_number': {'type': 'integer'},
+                    'view_count': {'type': 'integer', 'minimum': 1, 'maximum': 10, 'default': 5},
                     'video_view1': {'type': 'string', 'format': 'binary'},
                     'video_view2': {'type': 'string', 'format': 'binary'},
                     'video_view3': {'type': 'string', 'format': 'binary'},
                     'video_view4': {'type': 'string', 'format': 'binary'},
                     'video_view5': {'type': 'string', 'format': 'binary'},
+                    'video_view6': {'type': 'string', 'format': 'binary'},
+                    'video_view7': {'type': 'string', 'format': 'binary'},
+                    'video_view8': {'type': 'string', 'format': 'binary'},
+                    'video_view9': {'type': 'string', 'format': 'binary'},
+                    'video_view10': {'type': 'string', 'format': 'binary'},
                 },
-                'required': ['name', 'session_id', 'part_number',
-                            'video_view1', 'video_view2', 'video_view3',
-                            'video_view4', 'video_view5'],
+                'required': ['name', 'session_id', 'part_number', 'video_view1'],
             }
         },
         responses={
@@ -1656,16 +1660,17 @@ class TaskViewSet(viewsets.GenericViewSet, mixins.ListModelMixin,
             parser_classes=[MultiPartParser])
     def create_multiview(self, request: ExtendedRequest):
         """
-        Create a multiview task from 5 synchronized video files.
+        Create a multiview task from 1-10 synchronized video files.
 
-        This endpoint creates a CVAT task with 5 video streams from the
-        MultiSensor-Home1 dataset, allowing annotation on synchronized
-        multi-camera views with audio mixing and spectrogram visualization.
+        This endpoint creates a CVAT task with multiple video streams,
+        allowing annotation on synchronized multi-camera views with
+        audio mixing and spectrogram visualization.
         """
         # Validate required fields
         task_name = request.data.get('name')
         session_id = request.data.get('session_id')
         part_number = request.data.get('part_number')
+        view_count = int(request.data.get('view_count', 5))
 
         if not all([task_name, session_id, part_number]):
             return Response(
@@ -1673,13 +1678,19 @@ class TaskViewSet(viewsets.GenericViewSet, mixins.ListModelMixin,
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Validate all 5 video files are present
+        if not (1 <= view_count <= 10):
+            return Response(
+                {'error': 'view_count must be between 1 and 10'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate video files based on view_count
         video_files = {}
-        for i in range(1, 6):
+        for i in range(1, view_count + 1):
             view_key = f'video_view{i}'
             if view_key not in request.FILES:
                 return Response(
-                    {'error': f'Missing required file: {view_key}'},
+                    {'error': f'Missing required file: {view_key} (required for view_count={view_count})'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             video_files[view_key] = request.FILES[view_key]
@@ -1728,11 +1739,11 @@ class TaskViewSet(viewsets.GenericViewSet, mixins.ListModelMixin,
                 video_dir = os.path.join(settings.DATA_ROOT, 'multiview', str(db_task.id))
                 os.makedirs(video_dir, exist_ok=True)
 
-                # Create 5 Video records and save files
+                # Create Video records and save files (based on view_count)
                 video_objects = {}
                 video_metadata_list = []
 
-                for i in range(1, 6):
+                for i in range(1, view_count + 1):
                     view_key = f'video_view{i}'
                     video_file = video_files[view_key]
 
@@ -1757,17 +1768,19 @@ class TaskViewSet(viewsets.GenericViewSet, mixins.ListModelMixin,
                     )
                     video_objects[view_key] = video_obj
 
-                # Create MultiviewData linking all videos
-                multiview_data = models.MultiviewData.objects.create(
-                    data=data_obj,
-                    session_id=session_id,
-                    part_number=int(part_number),
-                    video_view1=video_objects['video_view1'],
-                    video_view2=video_objects['video_view2'],
-                    video_view3=video_objects['video_view3'],
-                    video_view4=video_objects['video_view4'],
-                    video_view5=video_objects['video_view5'],
-                )
+                # Create MultiviewData linking provided videos
+                multiview_kwargs = {
+                    'data': data_obj,
+                    'session_id': session_id,
+                    'part_number': int(part_number),
+                    'view_count': view_count,
+                    'video_view1': video_objects['video_view1'],
+                }
+                # Add optional views (2-10) if provided
+                for i in range(2, view_count + 1):
+                    multiview_kwargs[f'video_view{i}'] = video_objects.get(f'video_view{i}')
+
+                multiview_data = models.MultiviewData.objects.create(**multiview_kwargs)
 
                 # Use actual frame count from first video (all should be synchronized)
                 # In multiview setup, all videos should have the same frame count
@@ -1816,7 +1829,7 @@ class TaskViewSet(viewsets.GenericViewSet, mixins.ListModelMixin,
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(summary='Serve multiview video', tags=['tasks'])
-    @action(detail=True, methods=['GET'], url_path='multiview/video/(?P<view_id>[1-5])')
+    @action(detail=True, methods=['GET'], url_path=r'multiview/video/(?P<view_id>(?:[1-9]|10))')
     def serve_multiview_video(self, request: ExtendedRequest, pk: int, view_id: str):
         """
         Serve multiview video files with HTTP range support for seeking.

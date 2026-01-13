@@ -837,6 +837,7 @@ export interface InterpolatedPosition {
 
 export class Track extends Drawn {
     public shapes: Record<number, TrackedShape>;
+    public viewId: number | null;
     constructor(
         data: SerializedTrack | SerializedTrack['elements'][0],
         clientID: number,
@@ -848,6 +849,7 @@ export class Track extends Drawn {
             acc[shape.frame] = convertTrackedShape(shape);
             return acc;
         }, {});
+        this.viewId = (data as SerializedTrack).view_id ?? null;
     }
 
     protected withContext(frame: number): ReturnType<Drawn['withContext']> & {
@@ -871,6 +873,7 @@ export class Track extends Drawn {
             frame: this.frame,
             group: this.group,
             source: this.source,
+            view_id: this.viewId,
             attributes: Object.keys(this.attributes).reduce((attributeAccumulator, attrId) => {
                 if (!labelAttributes[attrId].mutable) {
                     attributeAccumulator.push({

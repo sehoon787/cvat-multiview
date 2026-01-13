@@ -12,6 +12,7 @@ import Collapse from 'antd/lib/collapse';
 import notification from 'antd/lib/notification';
 import Text from 'antd/lib/typography/Text';
 import Alert from 'antd/lib/alert';
+import Radio, { RadioChangeEvent } from 'antd/lib/radio';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { ValidateErrorEntity } from 'rc-field-form/lib/interface';
 import { getCore, Storage, StorageLocation } from 'cvat-core-wrapper';
@@ -28,6 +29,7 @@ import ProjectSubsetField from './project-subset-field';
 import MultiTasksProgress from './multi-task-progress';
 import AdvancedConfigurationForm, { AdvancedConfiguration, SortingMethod } from './advanced-configuration-form';
 import QualityConfigurationForm, { QualityConfiguration, ValidationMode } from './quality-configuration-form';
+import MultiviewFileUpload, { MultiviewFiles, MIN_VIEWS, MAX_VIEWS } from './multiview-file-upload';
 
 type TabName = 'local' | 'share' | 'remote' | 'cloudStorage';
 const core = getCore();
@@ -56,6 +58,8 @@ interface Props {
     many: boolean;
 }
 
+type TaskType = 'standard' | 'multiview';
+
 type State = CreateTaskData & {
     multiTasks: (CreateTaskData & {
         status: 'pending' | 'progress' | 'failed' | 'completed' | 'cancelled';
@@ -63,6 +67,11 @@ type State = CreateTaskData & {
     uploadFileErrorMessage: string;
     loading: boolean;
     statusInProgressTask: string;
+    taskType: TaskType;
+    multiviewFiles: MultiviewFiles;
+    multiviewViewCount: number;
+    multiviewSessionId: string;
+    multiviewPartNumber: number;
 };
 
 const defaultState: State = {
@@ -106,6 +115,11 @@ const defaultState: State = {
     uploadFileErrorMessage: '',
     loading: false,
     statusInProgressTask: '',
+    taskType: 'standard',
+    multiviewFiles: {},
+    multiviewViewCount: 1,
+    multiviewSessionId: '',
+    multiviewPartNumber: 1,
 };
 
 const UploadFileErrorMessages = {
@@ -748,6 +762,158 @@ class CreateTaskContent extends React.PureComponent<Props & RouteComponentProps,
         }));
     };
 
+    private handleTaskTypeChange = (e: RadioChangeEvent): void => {
+        this.setState({
+            taskType: e.target.value,
+            uploadFileErrorMessage: '',
+        });
+    };
+
+    private handleMultiviewFileChange = (viewId: number, file: File | null): void => {
+        this.setState((state) => ({
+            multiviewFiles: {
+                ...state.multiviewFiles,
+                [viewId]: file,
+            },
+        }));
+    };
+
+    private handleMultiviewAddView = (): void => {
+        this.setState((state) => {
+            const newCount = state.multiviewViewCount + 1;
+            if (newCount > MAX_VIEWS) return state;
+            return {
+                multiviewViewCount: newCount,
+            };
+        });
+    };
+
+    private handleMultiviewRemoveView = (viewId: number): void => {
+        this.setState((state) => {
+            if (state.multiviewViewCount <= MIN_VIEWS) return state;
+
+            // Shift files after the removed view to maintain order
+            const newFiles: MultiviewFiles = {};
+            let newIndex = 1;
+            for (let i = 1; i <= state.multiviewViewCount; i++) {
+                if (i !== viewId) {
+                    newFiles[newIndex] = state.multiviewFiles[i] || null;
+                    newIndex++;
+                }
+            }
+
+            return {
+                multiviewViewCount: state.multiviewViewCount - 1,
+                multiviewFiles: newFiles,
+            };
+        });
+    };
+
+    private handleMultiviewSessionIdChange = (value: string): void => {
+        this.setState({
+            multiviewSessionId: value,
+        });
+    };
+
+    private handleMultiviewPartNumberChange = (value: number): void => {
+        this.setState({
+            multiviewPartNumber: value,
+        });
+    };
+
+    private handleMultiviewSubmit = async (): Promise<void> => {
+        const { history } = this.props;
+        const {
+            basic,
+            labels,
+            multiviewFiles,
+            multiviewViewCount,
+            multiviewSessionId,
+            multiviewPartNumber,
+        } = this.state;
+
+        // Validate all required files are selected based on view count
+        const viewIds = Array.from({ length: multiviewViewCount }, (_, i) => i + 1);
+        const allFilesSelected = viewIds.every(
+            (viewId) => multiviewFiles[viewId] !== null && multiviewFiles[viewId] !== undefined,
+        );
+
+        if (!allFilesSelected) {
+            notification.error({
+                message: 'Could not create multiview task',
+                description: `Please select all ${multiviewViewCount} view videos`,
+                className: 'cvat-notification-create-task-fail',
+            });
+            return;
+        }
+
+        if (!multiviewSessionId.trim()) {
+            notification.error({
+                message: 'Could not create multiview task',
+                description: 'Session ID is required',
+                className: 'cvat-notification-create-task-fail',
+            });
+            return;
+        }
+
+        if (!basic.name.trim()) {
+            notification.error({
+                message: 'Could not create multiview task',
+                description: 'Task name is required',
+                className: 'cvat-notification-create-task-fail',
+            });
+            return;
+        }
+
+        this.startLoading();
+
+        try {
+            const formData = new FormData();
+            formData.append('name', basic.name);
+            formData.append('session_id', multiviewSessionId);
+            formData.append('part_number', String(multiviewPartNumber));
+            formData.append('view_count', String(multiviewViewCount));
+
+            if (labels.length > 0) {
+                formData.append('labels', JSON.stringify(labels));
+            }
+
+            // Add video files dynamically based on view count
+            viewIds.forEach((viewId) => {
+                const file = multiviewFiles[viewId];
+                if (file) {
+                    formData.append(`video_view${viewId}`, file);
+                }
+            });
+
+            const response = await core.server.request(
+                '/api/tasks/create_multiview',
+                {
+                    method: 'POST',
+                    data: formData,
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                },
+            );
+
+            notification.success({
+                message: 'Multiview task created successfully',
+                className: 'cvat-notification-create-task-success',
+            });
+
+            history.push(`/tasks/${response.data.id}`);
+        } catch (error: any) {
+            notification.error({
+                message: 'Failed to create multiview task',
+                description: error.toString(),
+                className: 'cvat-notification-create-task-fail',
+            });
+        } finally {
+            this.stopLoading();
+        }
+    };
+
     private getTaskName = (indexFile: number, fileManagerTabName: TabName, defaultFileName = ''): string => {
         const { many } = this.props;
         const { basic } = this.state;
@@ -785,6 +951,30 @@ class CreateTaskContent extends React.PureComponent<Props & RouteComponentProps,
                     onChange={this.handleChangeBasicConfiguration}
                 />
             </Col>
+        );
+    }
+
+    private renderTaskTypeBlock(): JSX.Element {
+        const { many } = this.props;
+        const { taskType } = this.state;
+
+        // Don't show task type selection in "many" mode
+        if (many) {
+            return <></>;
+        }
+
+        return (
+            <>
+                <Col span={24}>
+                    <Text className='cvat-text-color'>Task Type</Text>
+                </Col>
+                <Col span={24}>
+                    <Radio.Group value={taskType} onChange={this.handleTaskTypeChange}>
+                        <Radio value='standard'>Standard (2D/3D)</Radio>
+                        <Radio value='multiview'>Multiview (1-10 Cameras)</Radio>
+                    </Radio.Group>
+                </Col>
+            </>
         );
     }
 
@@ -860,7 +1050,35 @@ class CreateTaskContent extends React.PureComponent<Props & RouteComponentProps,
 
     private renderFilesBlock(): JSX.Element {
         const { many } = this.props;
-        const { uploadFileErrorMessage } = this.state;
+        const {
+            uploadFileErrorMessage,
+            taskType,
+            multiviewFiles,
+            multiviewViewCount,
+            multiviewSessionId,
+            multiviewPartNumber,
+        } = this.state;
+
+        // Show multiview file upload for multiview task type
+        if (taskType === 'multiview') {
+            return (
+                <Col span={24}>
+                    <Text type='danger'>* </Text>
+                    <Text className='cvat-text-color'>Multiview Videos</Text>
+                    <MultiviewFileUpload
+                        files={multiviewFiles}
+                        viewCount={multiviewViewCount}
+                        sessionId={multiviewSessionId}
+                        partNumber={multiviewPartNumber}
+                        onFileChange={this.handleMultiviewFileChange}
+                        onAddView={this.handleMultiviewAddView}
+                        onRemoveView={this.handleMultiviewRemoveView}
+                        onSessionIdChange={this.handleMultiviewSessionIdChange}
+                        onPartNumberChange={this.handleMultiviewPartNumberChange}
+                    />
+                </Col>
+            );
+        }
 
         return (
             <>
@@ -1001,6 +1219,34 @@ class CreateTaskContent extends React.PureComponent<Props & RouteComponentProps,
         );
     }
 
+    private renderFooterMultiview(): JSX.Element {
+        const { loading, multiviewFiles, multiviewViewCount } = this.state;
+
+        const viewIds = Array.from({ length: multiviewViewCount }, (_, i) => i + 1);
+        const allFilesSelected = viewIds.every(
+            (viewId) => multiviewFiles[viewId] !== null && multiviewFiles[viewId] !== undefined,
+        );
+
+        if (loading) {
+            return (<Alert message='Creating multiview task...' type='info' />);
+        }
+
+        return (
+            <Row justify='end' gutter={8}>
+                <Col>
+                    <Button
+                        className='cvat-submit-multiview-task-button'
+                        type='primary'
+                        onClick={this.handleMultiviewSubmit}
+                        disabled={!allFilesSelected}
+                    >
+                        Create Multiview Task
+                    </Button>
+                </Col>
+            </Row>
+        );
+    }
+
     private renderFooterMultiTasks(): JSX.Element {
         const {
             multiTasks: items,
@@ -1046,6 +1292,17 @@ class CreateTaskContent extends React.PureComponent<Props & RouteComponentProps,
 
     public render(): JSX.Element {
         const { many } = this.props;
+        const { taskType } = this.state;
+
+        const renderFooter = (): JSX.Element => {
+            if (many) {
+                return this.renderFooterMultiTasks();
+            }
+            if (taskType === 'multiview') {
+                return this.renderFooterMultiview();
+            }
+            return this.renderFooterSingleTask();
+        };
 
         return (
             <Row justify='start' align='middle' className='cvat-create-task-content'>
@@ -1054,15 +1311,16 @@ class CreateTaskContent extends React.PureComponent<Props & RouteComponentProps,
                 </Col>
 
                 {this.renderBasicBlock()}
-                {this.renderProjectBlock()}
-                {this.renderSubsetBlock()}
+                {this.renderTaskTypeBlock()}
+                {taskType === 'standard' && this.renderProjectBlock()}
+                {taskType === 'standard' && this.renderSubsetBlock()}
                 {this.renderLabelsBlock()}
                 {this.renderFilesBlock()}
-                {this.renderAdvancedBlock()}
-                {this.renderQualityBlock()}
+                {taskType === 'standard' && this.renderAdvancedBlock()}
+                {taskType === 'standard' && this.renderQualityBlock()}
 
                 <Col span={24} className='cvat-create-task-content-footer'>
-                    {many ? this.renderFooterMultiTasks() : this.renderFooterSingleTask() }
+                    {renderFooter()}
                 </Col>
             </Row>
         );

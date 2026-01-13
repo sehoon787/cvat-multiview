@@ -2972,9 +2972,10 @@ class PluginsSerializer(serializers.Serializer):
 class MultiviewDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.MultiviewData
-        fields = ['id', 'session_id', 'part_number',
+        fields = ['id', 'session_id', 'part_number', 'view_count',
                   'video_view1', 'video_view2', 'video_view3',
-                  'video_view4', 'video_view5']
+                  'video_view4', 'video_view5', 'video_view6',
+                  'video_view7', 'video_view8', 'video_view9', 'video_view10']
         read_only_fields = ['id']
 
 class DataMetaReadSerializer(serializers.ModelSerializer):
@@ -3354,7 +3355,7 @@ class LabeledTrackSerializerFromDB(serializers.BaseSerializer):
                 'id', 'type', 'frame', 'occluded', 'outside', 'z_order',
                 'rotation', 'points', 'attributes',
             ]
-            result = _convert_annotation(track, ['id', 'label_id', 'frame', 'group', 'source'])
+            result = _convert_annotation(track, ['id', 'label_id', 'frame', 'group', 'source', 'view_id'])
             result['shapes'] = [_convert_annotation(shape, shape_keys) for shape in track['shapes']]
             result['attributes'] = _convert_attributes(track['attributes'])
             for shape in result['shapes']:
@@ -3373,6 +3374,7 @@ class TrackedShapeSerializer(ShapeSerializer):
 class SubLabeledTrackSerializer(AnnotationSerializer):
     shapes = TrackedShapeSerializer(many=True, allow_empty=True)
     attributes = AttributeValSerializer(many=True, default=[])
+    view_id = serializers.IntegerField(required=False, allow_null=True)
 
 class LabeledTrackSerializer(SubLabeledTrackSerializer):
     elements = SubLabeledTrackSerializer(many=True, required=False)

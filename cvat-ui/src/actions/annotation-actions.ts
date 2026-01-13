@@ -1016,31 +1016,29 @@ export function getJobAsync({
             // Load multiview data if job is multiview type
             let multiviewData = null;
             if (job.dimension === DimensionType.MULTIVIEW) {
-                // Construct video URLs for all 5 views
+                // Fetch multiview metadata to get view_count
+                let viewCount = 5; // default fallback
+                try {
+                    const response = await cvat.server.request(`/api/tasks/${taskID}/multiview_data/`);
+                    viewCount = response.data?.view_count || 5;
+                } catch (e) {
+                    // If endpoint fails, use default view count
+                    console.warn('Could not fetch multiview_data, using default view count:', e);
+                }
+
+                // Construct video URLs dynamically based on view_count
+                const videos: Record<string, { url: string; fps: number }> = {};
+                for (let i = 1; i <= viewCount; i++) {
+                    videos[`view${i}`] = {
+                        url: `/api/tasks/${taskID}/multiview/video/${i}`,
+                        fps: 30, // Will be updated from metadata if available
+                    };
+                }
+
                 multiviewData = {
-                    videos: {
-                        view1: {
-                            url: `/api/tasks/${taskID}/multiview/video/1`,
-                            fps: 30, // Will be updated from metadata if available
-                        },
-                        view2: {
-                            url: `/api/tasks/${taskID}/multiview/video/2`,
-                            fps: 30,
-                        },
-                        view3: {
-                            url: `/api/tasks/${taskID}/multiview/video/3`,
-                            fps: 30,
-                        },
-                        view4: {
-                            url: `/api/tasks/${taskID}/multiview/video/4`,
-                            fps: 30,
-                        },
-                        view5: {
-                            url: `/api/tasks/${taskID}/multiview/video/5`,
-                            fps: 30,
-                        },
-                    },
+                    videos,
                     activeView: 1,
+                    viewCount,
                 };
             }
 

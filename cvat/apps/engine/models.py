@@ -433,16 +433,36 @@ class Video(models.Model):
 
 class MultiviewData(models.Model):
     data = models.OneToOneField(Data, on_delete=models.CASCADE, related_name="multiview_data")
+    view_count = models.PositiveSmallIntegerField(default=5)  # Number of active views (1-10)
+
+    # view1 is required
     video_view1 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view1")
-    video_view2 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view2")
-    video_view3 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view3")
-    video_view4 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view4")
-    video_view5 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view5")
+
+    # view2-10 are optional (null allowed)
+    video_view2 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view2", null=True, blank=True)
+    video_view3 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view3", null=True, blank=True)
+    video_view4 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view4", null=True, blank=True)
+    video_view5 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view5", null=True, blank=True)
+    video_view6 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view6", null=True, blank=True)
+    video_view7 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view7", null=True, blank=True)
+    video_view8 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view8", null=True, blank=True)
+    video_view9 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view9", null=True, blank=True)
+    video_view10 = models.ForeignKey(Video, on_delete=models.CASCADE, related_name="multiview_view10", null=True, blank=True)
+
     session_id = models.CharField(max_length=64)
     part_number = models.IntegerField()
 
     class Meta:
         default_permissions = ()
+
+    def get_active_videos(self):
+        """Return list of non-null video views in order."""
+        videos = []
+        for i in range(1, 11):
+            video = getattr(self, f'video_view{i}', None)
+            if video:
+                videos.append(video)
+        return videos
 
 
 class Image(models.Model):
@@ -1236,6 +1256,7 @@ class LabeledShapeAttributeVal(AttributeVal):
 
 class LabeledTrack(Annotation):
     parent = models.ForeignKey('self', on_delete=models.DO_NOTHING, null=True, related_name='elements')
+    view_id = models.PositiveSmallIntegerField(null=True, default=None)
 
 class LabeledTrackAttributeVal(AttributeVal):
     track = models.ForeignKey(LabeledTrack, on_delete=models.DO_NOTHING,

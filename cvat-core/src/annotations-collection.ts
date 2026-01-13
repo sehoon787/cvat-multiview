@@ -1128,6 +1128,7 @@ export default class Collection {
                         group: 0,
                         source: state.source,
                         label_id: state.label.id,
+                        view_id: state.viewId ?? null,
                         shapes: [
                             {
                                 attributes: attributes.filter((attr) => labelAttributes[attr.spec_id].mutable),

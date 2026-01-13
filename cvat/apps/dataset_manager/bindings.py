@@ -27,6 +27,7 @@ from attr import attrib, attrs
 from attrs.converters import to_bool
 from datumaro.components.format_detection import RejectionReason
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 
@@ -231,6 +232,7 @@ class CommonData(InstanceLabelData):
         elements: Sequence[CommonData.LabeledShape] = ()
         outside: bool = False
         id: int | None = None
+        view_id: int | None = None
 
     class TrackedShape(NamedTuple):
         type: int
@@ -256,6 +258,7 @@ class CommonData(InstanceLabelData):
         shapes: Sequence[CommonData.TrackedShape]
         elements: Sequence[int] = ()
         id: int | None = None
+        view_id: int | None = None
 
     class Tag(NamedTuple):
         frame: int
@@ -450,7 +453,8 @@ class CommonData(InstanceLabelData):
             group=shape.get("group", 0),
             source=shape["source"],
             attributes=self._export_attributes(shape["attributes"]),
-            elements=[self._export_labeled_shape(element) for element in shape.get("elements", [])]
+            elements=[self._export_labeled_shape(element) for element in shape.get("elements", [])],
+            view_id=shape.get("view_id"),
         )
 
     def _export_shape(self, shape):
@@ -487,7 +491,8 @@ class CommonData(InstanceLabelData):
             source=track["source"],
             shapes=[self._export_tracked_shape(shape)
                 for shape in tracked_shapes if not self._is_frame_deleted(shape["frame"])],
-            elements=[self._export_track(element, i) for i, element in enumerate(track.get("elements", []))]
+            elements=[self._export_track(element, i) for i, element in enumerate(track.get("elements", []))],
+            view_id=track.get("view_id"),
         )
 
     @staticmethod
@@ -848,6 +853,28 @@ class JobData(CommonData):
                 "height": str(self._db_data.video.height)
             }
 
+        # Add multiview information if available
+        try:
+            multiview_data = self._db_data.multiview_data
+            if multiview_data:
+                views = []
+                for i in range(1, 6):
+                    video = getattr(multiview_data, f'video_view{i}', None)
+                    if video:
+                        views.append(("view", {
+                            "id": str(i),
+                            "video_path": osp.basename(video.path) if video.path else f'view{i}.mp4',
+                            "width": str(video.width),
+                            "height": str(video.height),
+                        }))
+                self._meta["multiview"] = {
+                    "session_id": multiview_data.session_id or '',
+                    "part_number": str(multiview_data.part_number) if multiview_data.part_number else '',
+                    "views": views,
+                }
+        except (AttributeError, ObjectDoesNotExist):
+            pass  # No multiview data for this job
+
     def _init_frame_info(self):
         super()._init_frame_info()
 
@@ -1023,6 +1050,7 @@ class ProjectData(InstanceLabelData):
         subset: str = attrib(default=None)
         outside: bool = attrib(default=False)
         elements: list['ProjectData.LabeledShape'] = attrib(default=[])
+        view_id: int = attrib(default=None)
 
     @attrs
     class TrackedShape:
@@ -1050,6 +1078,7 @@ class ProjectData(InstanceLabelData):
         task_id: int = attrib(default=None)
         subset: str = attrib(default=None)
         elements: list['ProjectData.Track'] = attrib(default=[])
+        view_id: int = attrib(default=None)
 
     @attrs
     class Tag:
@@ -1252,6 +1281,7 @@ class ProjectData(InstanceLabelData):
             attributes=self._export_attributes(shape["attributes"]),
             elements=[self._export_labeled_shape(element, task_id) for element in shape.get("elements", [])],
             task_id=task_id,
+            view_id=shape.get("view_id"),
         )
 
     def _export_tag(self, tag: dict, task_id: int):
@@ -1284,7 +1314,8 @@ class ProjectData(InstanceLabelData):
                 if (task_id, shape["frame"]) not in self._deleted_frames],
             task_id=task_id,
             elements=[self._export_track(element, task_id, task_size, i)
-                for i, element in enumerate(track.get("elements", []))]
+                for i, element in enumerate(track.get("elements", []))],
+            view_id=track.get("view_id"),
         )
 
     def group_by_frame(self, include_empty: bool = False) -> Generator[CommonData.Frame, None, None]:

@@ -36,8 +36,8 @@ export class MultiviewAudioEngine {
             return;
         }
 
-        if (videoElements.length !== 5) {
-            throw new Error('MultiviewAudioEngine requires exactly 5 video elements');
+        if (videoElements.length === 0 || videoElements.length > 10) {
+            throw new Error('MultiviewAudioEngine requires 1-10 video elements');
         }
 
         try {
@@ -82,9 +82,10 @@ export class MultiviewAudioEngine {
             // Create source from video element
             const source = this.audioContext.createMediaElementSource(video);
 
-            // Create gain node for volume control (20% each to prevent clipping)
+            // Create gain node for volume control (distribute evenly to prevent clipping)
             const gain = this.audioContext.createGain();
-            gain.gain.value = 0.2;
+            // Note: we'll set the actual gain value later when all sources are attached
+            gain.gain.value = 0.2; // default, will be adjusted based on source count
 
             // Connect: source -> gain -> merger (both left and right channels)
             source.connect(gain);
@@ -242,7 +243,7 @@ export class MultiviewAudioEngine {
     }
 
     /**
-     * Mix multiple AudioBuffers into one (each at 20% volume to prevent clipping)
+     * Mix multiple AudioBuffers into one (with dynamic gain based on source count to prevent clipping)
      */
     public mixAudioBuffers(buffers: AudioBuffer[]): AudioBuffer {
         if (buffers.length === 0) {
@@ -256,13 +257,15 @@ export class MultiviewAudioEngine {
 
         const mixedBuffer = context.createBuffer(numberOfChannels, maxLength, sampleRate);
 
+        // Dynamic gain based on source count to prevent clipping
+        const gain = 1.0 / buffers.length;
+
         for (let channel = 0; channel < numberOfChannels; channel++) {
             const outputData = mixedBuffer.getChannelData(channel);
 
             buffers.forEach((buffer) => {
                 const sourceChannel = Math.min(channel, buffer.numberOfChannels - 1);
                 const inputData = buffer.getChannelData(sourceChannel);
-                const gain = 0.2; // 20% each to prevent clipping with 5 sources
 
                 for (let i = 0; i < inputData.length; i++) {
                     outputData[i] += inputData[i] * gain;

@@ -1180,6 +1180,8 @@ def dump_as_cvat_interpolation(dumper, annotations: CommonData | ProjectData):
 
         if track.group:
             dump_data["group_id"] = str(track.group)
+        if hasattr(track, "view_id") and track.view_id is not None:
+            dump_data["view_id"] = str(track.view_id)
         dumper.open_track(dump_data)
 
         element_shapes = {}
@@ -1225,6 +1227,7 @@ def dump_as_cvat_interpolation(dumper, annotations: CommonData | ProjectData):
             "label": shape.label,
             "group": shape.group,
             "source": shape.source,
+            "view_id": getattr(shape, "view_id", None),
             "shapes": [
                 annotations.TrackedShape(
                     type=shape.type,

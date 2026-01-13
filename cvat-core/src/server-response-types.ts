@@ -441,6 +441,7 @@ export interface SerializedTrack {
     group: number;
     frame: number;
     source: Source;
+    view_id?: number | null;
     attributes: { spec_id: number; value: string }[];
     shapes: {
         attributes: SerializedTrack['attributes'];

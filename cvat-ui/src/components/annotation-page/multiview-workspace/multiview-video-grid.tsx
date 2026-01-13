@@ -29,20 +29,21 @@ export default function MultiviewVideoGrid(props: Props): JSX.Element {
     const playing = useSelector((state: CombinedState) => state.annotation.player.playing);
     const multiviewData = useSelector((state: CombinedState) => state.annotation.multiviewData);
 
-    // Collect available views dynamically
+    // Collect available views dynamically (supports 1-10 views)
     const availableViews: ViewConfig[] = [];
     if (multiviewData?.videos) {
-        const viewKeys = ['view1', 'view2', 'view3', 'view4', 'view5'] as const;
-        viewKeys.forEach((key, index) => {
+        // Generate view keys dynamically for views 1-10
+        for (let i = 1; i <= 10; i++) {
+            const key = `view${i}` as keyof typeof multiviewData.videos;
             const viewData = multiviewData.videos[key];
             if (viewData?.url) {
                 availableViews.push({
-                    viewId: index + 1,
+                    viewId: i,
                     url: viewData.url,
                     fps: viewData.fps || 30,
                 });
             }
-        });
+        }
     }
 
     // Check if we have at least one view

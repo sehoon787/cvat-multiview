@@ -646,6 +646,7 @@ class JobAnnotation:
                 "rotation",
                 "points",
                 "parent",
+                "view_id",
             )
             .order_by("frame")
             .iterator(chunk_size=settings.DEFAULT_DB_ANNO_CHUNK_SIZE)
@@ -718,6 +719,7 @@ class JobAnnotation:
                 "group",
                 "source",
                 "parent",
+                "view_id",
                 "shape__type",
                 "shape__occluded",
                 "shape__z_order",
