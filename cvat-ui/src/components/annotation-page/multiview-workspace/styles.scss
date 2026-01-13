@@ -120,11 +120,8 @@
             }
 
             .annotation-canvas-overlay {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
+                // Position is set dynamically via inline styles
+                // to match the video display area (accounting for object-fit: contain)
                 pointer-events: none;
                 z-index: 5;
 
