@@ -161,6 +161,14 @@
                 #cvat_canvas_bitmap {
                     background: transparent !important;
                 }
+
+                // Make drawing preview shape transparent (default is white fill)
+                // This prevents the white overlay appearing when drawing
+                // Note: Using fill: transparent instead of fill-opacity because
+                // the drawHandler sets inline fill-opacity attribute which overrides CSS
+                .cvat_canvas_shape_drawing {
+                    fill: transparent !important;
+                }
             }
 
             .view-label {
