@@ -11,11 +11,12 @@ export interface FilterAnnotationsParams {
     exclude?: ObjectType[];
     include?: ObjectType[];
     frame?: number;
+    viewId?: number | null;
 }
 
 export function filterAnnotations(annotations: ObjectState[], params: FilterAnnotationsParams): ObjectState[] {
     const {
-        workspace, exclude, include, frame,
+        workspace, exclude, include, frame, viewId,
     } = params;
 
     if (Array.isArray(exclude) && Array.isArray(include)) {
@@ -43,6 +44,20 @@ export function filterAnnotations(annotations: ObjectState[], params: FilterAnno
         // Filter out SHAPEs that don't belong to the current frame
         if (objectState.objectType === ObjectType.SHAPE && frame !== undefined) {
             if (objectState.frame !== frame) {
+                return false;
+            }
+        }
+
+        // Filter by viewId for Multiview workspace
+        // Annotations without viewId are shown only in View 1 (for backward compatibility)
+        if (viewId !== undefined && viewId !== null && workspace === Workspace.MULTIVIEW) {
+            const stateViewId = (objectState as any).viewId;
+            if (stateViewId === null || stateViewId === undefined) {
+                // Annotations without viewId are shown only in View 1
+                if (viewId !== 1) {
+                    return false;
+                }
+            } else if (stateViewId !== viewId) {
                 return false;
             }
         }

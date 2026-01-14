@@ -7,8 +7,8 @@ import { useSelector, useDispatch } from 'react-redux';
 import Layout from 'antd/lib/layout';
 import Select from 'antd/lib/select';
 
-import { CombinedState } from 'reducers';
-import { changeFrameAsync, switchPlay } from 'actions/annotation-actions';
+import { CombinedState, ActiveControl } from 'reducers';
+import { changeFrameAsync, switchPlay, updateActiveControl as updateActiveControlAction } from 'actions/annotation-actions';
 import ControlsSideBarContainer from 'containers/annotation-page/standard-workspace/controls-side-bar/controls-side-bar';
 import ObjectSideBarComponent from 'components/annotation-page/standard-workspace/objects-side-bar/objects-side-bar';
 import CanvasContextMenuContainer from 'containers/annotation-page/canvas/canvas-context-menu';
@@ -159,12 +159,17 @@ export default function MultiviewWorkspace(): JSX.Element {
         } else {
             stopSyncIntervalRef.current();
             pauseAllVideosRef.current();
+
+            // Reset canvas control state on pause to ensure draw mode works correctly
+            // after switching views. Without this, the canvas can get stuck in an
+            // inconsistent state after video playback.
+            dispatch(updateActiveControlAction(ActiveControl.CURSOR));
         }
 
         return () => {
             stopSyncIntervalRef.current();
         };
-    }, [playing]);
+    }, [playing, dispatch]);
 
     // Seek all videos when frame changes while NOT playing
     useEffect(() => {
@@ -298,7 +303,7 @@ export default function MultiviewWorkspace(): JSX.Element {
                     onEngineReady={handleEngineReady}
                 />
             </Layout.Content>
-            <ObjectSideBarComponent objectsList={<MultiviewObjectsList />} />
+            <ObjectSideBarComponent objectsList={<MultiviewObjectsList activeView={activeView} />} />
             <CanvasContextMenuContainer />
             <CanvasPointContextMenuComponent />
             <RemoveConfirmComponent />

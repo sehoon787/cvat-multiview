@@ -957,6 +957,7 @@ export class Track extends Drawn {
             },
             frame,
             source: this.source,
+            viewId: this.viewId,
             __internal: this.withContext(frame),
         };
     }

@@ -38,6 +38,7 @@ import { openAnnotationsActionModal } from 'components/annotation-page/annotatio
 
 interface OwnProps {
     readonly: boolean;
+    viewId?: number | null;
 }
 
 interface StateToProps {
@@ -316,10 +317,12 @@ interface State {
 class ObjectsListContainer extends React.PureComponent<Props, State> {
     static propTypes = {
         readonly: PropTypes.bool,
+        viewId: PropTypes.number,
     };
 
     static defaultProps = {
         readonly: false,
+        viewId: null,
     };
 
     public constructor(props: Props) {
@@ -337,24 +340,28 @@ class ObjectsListContainer extends React.PureComponent<Props, State> {
     }
 
     public componentDidUpdate(prevProps: Props): void {
-        const { objectStates, frameNumber } = this.props;
+        const { objectStates, frameNumber, viewId } = this.props;
         const { objectStates: prevObjectStates } = this.state;
-        // Re-filter when objectStates OR frameNumber changes
+        // Re-filter when objectStates OR frameNumber OR viewId changes
         // frameNumber change is important for SHAPE annotations which only exist on specific frames
-        if (objectStates !== prevObjectStates || frameNumber !== prevProps.frameNumber) {
+        // viewId change is important for Multiview workspace to show correct annotations per view
+        if (objectStates !== prevObjectStates || frameNumber !== prevProps.frameNumber || viewId !== prevProps.viewId) {
             this.updateObjects();
         }
     }
 
     private updateObjects = (): void => {
         const {
-            objectStates, frameNumber, workspace,
+            objectStates, frameNumber, workspace, viewId,
         } = this.props;
         const { statesOrdering } = this.state;
+
         const filteredStates = filterAnnotations(objectStates, {
             frame: frameNumber,
             workspace,
+            viewId,
         });
+
         this.setState({
             objectStates,
             filteredStates,
