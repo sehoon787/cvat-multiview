@@ -456,10 +456,10 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
             forceDisableEditing: stateRefs.current.workspace === Workspace.REVIEW,
         });
 
-        // Fit canvas to container size - pass container dimensions explicitly
-        // because SVG element dimensions may not match container after view switch
-        canvasInstance.fitCanvas(canvasContainer.clientWidth, canvasContainer.clientHeight);
-        canvasInstance.fit(); // Recalculate scale based on new canvas size
+        // NOTE: Do NOT call fitCanvas()/fit() here before setup().
+        // This would calculate imageOffset using canvasSize (display container) instead of
+        // imageSize (video dimensions), causing coordinate mismatch (~50% smaller drawings).
+        // The correct sequence is: setup() -> fitCanvas() -> fit(), which happens below.
 
         // Create stable wrapper functions that delegate to refs
         // This allows callbacks to update without triggering useEffect re-runs
@@ -640,13 +640,17 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
         // The canvas handles the visual scaling between display and coordinate system internally
         canvasInstance.setup(frameData, filteredAnnotations, curZLayer);
 
-        // CRITICAL: Always call fit() AFTER setup() to ensure proper scale calculation
-        // setup() sets imageSize from frameData, and fit() recalculates scale based on
-        // both imageSize and canvasSize. Without this, scale can be incorrect (e.g., 10
-        // instead of ~0.225) when imageSize was 0x0 during initial fitCanvas()/fit() calls.
-        // When view changes, also call fitCanvas() to update canvasSize from new container.
+        // CRITICAL: Always call fitCanvas() and fit() AFTER setup() to ensure proper scale calculation.
+        // setup() sets imageSize from frameData, and fitCanvas()/fit() calculate imageOffset and scale
+        // using imageSize. Without this order, imageOffset is calculated from canvasSize (display container)
+        // instead of imageSize (video dimensions), causing coordinate mismatch (~50% smaller drawings).
+        //
+        // Call fitCanvas() on:
+        // 1. Initial setup (prevSetupViewIdRef.current is null)
+        // 2. View changes (need to update canvasSize from new container)
+        const isInitialSetup = prevSetupViewIdRef.current === null;
         if (canvasContainer) {
-            if (viewChanged) {
+            if (isInitialSetup || viewChanged) {
                 canvasInstance.fitCanvas(canvasContainer.clientWidth, canvasContainer.clientHeight);
             }
             canvasInstance.fit();

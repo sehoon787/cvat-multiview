@@ -12,6 +12,12 @@ import { CombinedState } from 'reducers';
 import { changeFrameAsync, switchPlay } from 'actions/annotation-actions';
 import { MultiviewAudioEngine } from './audio-engine';
 
+// Define MultiviewVideos type for type safety
+interface MultiviewVideos {
+    view1?: { fps?: number };
+    [key: string]: { fps?: number } | undefined;
+}
+
 interface Props {
     audioEngine: MultiviewAudioEngine | null;
     onEngineReady?: (engine: MultiviewAudioEngine) => void;
@@ -35,8 +41,10 @@ export default function SpectrogramPanel(props: Props): JSX.Element {
     const frameNumber = useSelector((state: CombinedState) => state.annotation.player.frame.number);
     const playing = useSelector((state: CombinedState) => state.annotation.player.playing);
     const job = useSelector((state: CombinedState) => state.annotation.job.instance);
+    const multiviewData = useSelector((state: CombinedState) => state.annotation.multiviewData);
 
-    const fps = 30; // TODO: Get actual FPS from job metadata
+    // Get FPS from multiview data (first view), fallback to 30
+    const fps = (multiviewData?.videos as MultiviewVideos | undefined)?.view1?.fps || 30;
     const currentTime = frameNumber / fps;
     const duration = audioDuration || (job ? (job.stopFrame - job.startFrame) / fps : 100);
 
@@ -198,7 +206,9 @@ export default function SpectrogramPanel(props: Props): JSX.Element {
 
         // Draw playhead marker (vertical red line)
         if (duration > 0) {
-            const markerX = (currentTime / duration) * width;
+            // Round to nearest pixel and add 0.5 to align stroke to pixel boundaries
+            // This prevents jitter/trembling caused by anti-aliasing at sub-pixel positions
+            const markerX = Math.round((currentTime / duration) * width) + 0.5;
 
             ctx.strokeStyle = '#ff4d4d';
             ctx.lineWidth = 2;
