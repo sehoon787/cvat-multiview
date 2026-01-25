@@ -119,8 +119,6 @@ export default function VideoCanvas(props: Props): JSX.Element {
      * Calculate video display area when:
      * - Video metadata loads (provides video dimensions)
      * - Container resizes
-     * This ensures the canvas overlay exactly matches the video display area,
-     * accounting for object-fit: contain letterboxing.
      */
     useEffect(() => {
         const video = videoRef.current;
@@ -130,15 +128,17 @@ export default function VideoCanvas(props: Props): JSX.Element {
 
         const updateDisplayArea = (): void => {
             const containerRect = container.getBoundingClientRect();
-            const videoWidth = video.videoWidth;
-            const videoHeight = video.videoHeight;
 
-            if (videoWidth > 0 && videoHeight > 0) {
+            // Use actual video dimensions for overlay positioning
+            const width = video.videoWidth;
+            const height = video.videoHeight;
+
+            if (width > 0 && height > 0) {
                 const displayArea = calculateVideoDisplayArea(
                     containerRect.width,
                     containerRect.height,
-                    videoWidth,
-                    videoHeight,
+                    width,
+                    height,
                 );
                 setVideoDisplayArea(displayArea);
             }
@@ -157,7 +157,7 @@ export default function VideoCanvas(props: Props): JSX.Element {
         video.addEventListener('loadedmetadata', handleLoadedMetadata);
         resizeObserver.observe(container);
 
-        // Initial calculation if video is already loaded
+        // Initial calculation if video metadata already available
         if (video.videoWidth > 0 && video.videoHeight > 0) {
             updateDisplayArea();
         }

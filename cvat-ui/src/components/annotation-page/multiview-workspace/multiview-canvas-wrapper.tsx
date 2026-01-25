@@ -80,12 +80,102 @@ interface Props {
     activeViewId: number;
 }
 
+/**
+ * Creates a frameData proxy that uses video-proportional dimensions.
+ * This ensures the canvas coordinate system matches the video aspect ratio,
+ * eliminating letterboxing that causes coordinate mismatch issues.
+ *
+ * Example: If video is 320x240 (4:3) and task is 1920x1080 (16:9):
+ * - We use width=1920, height=1440 (4:3) for the canvas
+ * - This fills the overlay without letterboxing
+ * - Coordinates are transformed when saving/loading annotations
+ */
+function createVideoProportionalFrameData(
+    frameData: any,
+    videoWidth: number,
+    videoHeight: number,
+): { frameData: any; canvasHeight: number; taskHeight: number } | null {
+    if (!frameData || videoWidth <= 0 || videoHeight <= 0) {
+        return null;
+    }
+
+    const taskWidth = frameData.width;
+    const taskHeight = frameData.height;
+    const videoAspect = videoWidth / videoHeight;
+
+    // Calculate height that matches video aspect ratio at task width
+    // This makes the canvas fill the overlay without letterboxing
+    const canvasHeight = Math.round(taskWidth / videoAspect);
+
+    // If aspect ratios are close (within 1%), no transformation needed
+    const taskAspect = taskWidth / taskHeight;
+    if (Math.abs(videoAspect - taskAspect) < 0.01) {
+        return null; // Use original frameData
+    }
+
+    // Create a proxy frameData with adjusted dimensions
+    const proxyFrameData = new Proxy(frameData, {
+        get(target, prop) {
+            if (prop === 'height') {
+                return canvasHeight;
+            }
+            return target[prop];
+        },
+    });
+
+    return { frameData: proxyFrameData, canvasHeight, taskHeight };
+}
+
+/**
+ * Transform Y coordinate from canvas space to task space for storage.
+ * Canvas space uses video aspect ratio, task space uses original video dimensions.
+ */
+function transformYForStorage(y: number, canvasHeight: number, taskHeight: number): number {
+    return y * (taskHeight / canvasHeight);
+}
+
+/**
+ * Transform Y coordinate from task space to canvas space for display.
+ * Task space uses original video dimensions, canvas space uses video aspect ratio.
+ */
+function transformYForDisplay(y: number, canvasHeight: number, taskHeight: number): number {
+    return y * (canvasHeight / taskHeight);
+}
+
+/**
+ * Transform annotation points from canvas space to task space for storage.
+ */
+function transformPointsForStorage(
+    points: number[],
+    canvasHeight: number,
+    taskHeight: number,
+): number[] {
+    // Points array is [x1, y1, x2, y2, ...] - transform Y values (odd indices)
+    return points.map((val, idx) => (idx % 2 === 1 ? transformYForStorage(val, canvasHeight, taskHeight) : val));
+}
+
+/**
+ * Transform annotation points from task space to canvas space for display.
+ */
+function transformPointsForDisplay(
+    points: number[],
+    canvasHeight: number,
+    taskHeight: number,
+): number[] {
+    // Points array is [x1, y1, x2, y2, ...] - transform Y values (odd indices)
+    return points.map((val, idx) => (idx % 2 === 1 ? transformYForDisplay(val, canvasHeight, taskHeight) : val));
+}
+
 export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null {
     const { canvasContainer, videoElement, activeViewId } = props;
     const dispatch = useDispatch();
     const mountedRef = useRef(false);
     const resizeObserverRef = useRef<ResizeObserver | null>(null);
     const prevViewIdRef = useRef<number | null>(null);
+
+    // Track coordinate transformation parameters for aspect ratio correction
+    // When video aspect ratio differs from task metadata, we need to transform coordinates
+    const transformParamsRef = useRef<{ canvasHeight: number; taskHeight: number } | null>(null);
 
     // Redux state selectors
     const canvasInstance = useSelector((state: CombinedState) => state.annotation.canvas.instance) as Canvas | null;
@@ -206,6 +296,17 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
         // attribute initialization internally. Setting it here can cause validation
         // issues with non-integer attribute IDs.
         state.viewId = refs.activeViewId;
+
+        // Transform coordinates from canvas space to task space if aspect ratio differs
+        // This ensures annotations are stored in the original video coordinate system
+        const transformParams = transformParamsRef.current;
+        if (transformParams && state.points && Array.isArray(state.points)) {
+            state.points = transformPointsForStorage(
+                state.points,
+                transformParams.canvasHeight,
+                transformParams.taskHeight,
+            );
+        }
 
         try {
             const objectState = new cvat.classes.ObjectState(state);
@@ -535,6 +636,27 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
 
         // Initial setup with current frame data (only if not in draw mode or draw requested)
         if (stateRefs.current.frameData && !shouldPreserveDrawState(canvasInstance, stateRefs.current.activeControl)) {
+            // Check if aspect ratio transformation is needed
+            const videoWidth = videoElement?.videoWidth || 0;
+            const videoHeight = videoElement?.videoHeight || 0;
+            const transformResult = createVideoProportionalFrameData(
+                stateRefs.current.frameData,
+                videoWidth,
+                videoHeight,
+            );
+
+            // Store transform params for coordinate transformation on annotation save
+            if (transformResult) {
+                transformParamsRef.current = {
+                    canvasHeight: transformResult.canvasHeight,
+                    taskHeight: transformResult.taskHeight,
+                };
+            } else {
+                transformParamsRef.current = null;
+            }
+
+            const effectiveFrameData = transformResult ? transformResult.frameData : stateRefs.current.frameData;
+
             const filteredAnnotations = filterAnnotations(stateRefs.current.annotations, {
                 frame: stateRefs.current.frameNumber,
                 workspace: stateRefs.current.workspace,
@@ -549,10 +671,26 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
                 return stateViewId === stateRefs.current.activeViewId;
             });
 
-            // Use original frameData dimensions (task metadata) for canvas coordinate system
-            // This ensures annotations are stored in the correct coordinate space (e.g., 1920x1080)
-            // even when the video element shows transcoded lower-resolution chunks (e.g., 320x240)
-            canvasInstance.setup(stateRefs.current.frameData, filteredAnnotations, stateRefs.current.curZLayer);
+            // Transform annotations from task space to canvas space for display if needed
+            let displayAnnotations = filteredAnnotations;
+            if (transformResult) {
+                displayAnnotations = filteredAnnotations.map((ann: any) => {
+                    if (ann.points && Array.isArray(ann.points)) {
+                        const transformedPoints = transformPointsForDisplay(
+                            ann.points,
+                            transformResult.canvasHeight,
+                            transformResult.taskHeight,
+                        );
+                        // Create a shallow copy with transformed points
+                        return { ...ann, points: transformedPoints };
+                    }
+                    return ann;
+                });
+            }
+
+            // Use video-proportional frameData for canvas coordinate system
+            // This eliminates letterboxing and ensures drawing coordinates match the overlay
+            canvasInstance.setup(effectiveFrameData, displayAnnotations, stateRefs.current.curZLayer);
 
             // CRITICAL: Call fitCanvas() and fit() AFTER setup() so imageOffset is calculated
             // using imageSize (from frameData) instead of canvasSize (display container).
@@ -605,10 +743,6 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
             return;
         }
 
-        // Note: We use frameData dimensions (task metadata) for canvas coordinate system
-        // This ensures annotations are stored in the correct coordinate space (e.g., 1920x1080)
-        // even when the video element shows transcoded lower-resolution chunks (e.g., 320x240)
-
         // Skip setup if canvas is in draw mode or draw operation is requested
         // This preserves active drawing state - canvas will be updated when drawing completes
         if (shouldPreserveDrawState(canvasInstance, activeControl)) {
@@ -618,6 +752,23 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
         // Check if viewId changed - need to recalculate canvas scale when view changes
         // because canvas may be attached to different container with different size
         const viewChanged = prevSetupViewIdRef.current !== null && prevSetupViewIdRef.current !== activeViewId;
+
+        // Check if aspect ratio transformation is needed
+        const videoWidth = videoElement?.videoWidth || 0;
+        const videoHeight = videoElement?.videoHeight || 0;
+        const transformResult = createVideoProportionalFrameData(frameData, videoWidth, videoHeight);
+
+        // Store transform params for coordinate transformation on annotation save
+        if (transformResult) {
+            transformParamsRef.current = {
+                canvasHeight: transformResult.canvasHeight,
+                taskHeight: transformResult.taskHeight,
+            };
+        } else {
+            transformParamsRef.current = null;
+        }
+
+        const effectiveFrameData = transformResult ? transformResult.frameData : frameData;
 
         // Filter annotations for current view and exclude tags
         const filteredAnnotations = filterAnnotations(annotations, {
@@ -634,11 +785,26 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
             return stateViewId === activeViewId;
         });
 
-        // Use original frameData dimensions (task metadata) for canvas coordinate system
-        // This ensures annotations are stored in the correct coordinate space (e.g., 1920x1080)
-        // even when the video element shows transcoded lower-resolution chunks (e.g., 320x240)
-        // The canvas handles the visual scaling between display and coordinate system internally
-        canvasInstance.setup(frameData, filteredAnnotations, curZLayer);
+        // Transform annotations from task space to canvas space for display if needed
+        let displayAnnotations = filteredAnnotations;
+        if (transformResult) {
+            displayAnnotations = filteredAnnotations.map((ann: any) => {
+                if (ann.points && Array.isArray(ann.points)) {
+                    const transformedPoints = transformPointsForDisplay(
+                        ann.points,
+                        transformResult.canvasHeight,
+                        transformResult.taskHeight,
+                    );
+                    // Create a shallow copy with transformed points
+                    return { ...ann, points: transformedPoints };
+                }
+                return ann;
+            });
+        }
+
+        // Use video-proportional frameData for canvas coordinate system
+        // This eliminates letterboxing and ensures drawing coordinates match the overlay
+        canvasInstance.setup(effectiveFrameData, displayAnnotations, curZLayer);
 
         // CRITICAL: Always call fitCanvas() and fit() AFTER setup() to ensure proper scale calculation.
         // setup() sets imageSize from frameData, and fitCanvas()/fit() calculate imageOffset and scale
@@ -658,7 +824,7 @@ export default function MultiviewCanvasWrapper(props: Props): JSX.Element | null
 
         // Always update prevSetupViewIdRef after processing
         prevSetupViewIdRef.current = activeViewId;
-    }, [canvasInstance, canvasContainer, frameData, annotations, curZLayer, activeViewId, frameNumber, workspace, activeControl]);
+    }, [canvasInstance, canvasContainer, frameData, videoElement, annotations, curZLayer, activeViewId, frameNumber, workspace, activeControl]);
 
     /**
      * Update canvas viewId when active view changes

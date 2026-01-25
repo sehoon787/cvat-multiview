@@ -1019,7 +1019,7 @@ export function getJobAsync({
                 // Fetch multiview metadata to get view_count
                 let viewCount = 5; // default fallback
                 try {
-                    const response = await cvat.server.request(`/api/tasks/${taskID}/multiview_data/`);
+                    const response = await cvat.server.request(`/api/tasks/${taskID}/multiview_data`);
                     viewCount = response.data?.view_count || 5;
                 } catch (e) {
                     // If endpoint fails, use default view count
