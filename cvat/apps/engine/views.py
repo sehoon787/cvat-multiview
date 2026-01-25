@@ -1742,10 +1742,14 @@ class TaskViewSet(viewsets.GenericViewSet, mixins.ListModelMixin,
                 # Create Video records and save files (based on view_count)
                 video_objects = {}
                 video_metadata_list = []
+                original_files = {}  # Store original file metadata
 
                 for i in range(1, view_count + 1):
                     view_key = f'video_view{i}'
                     video_file = video_files[view_key]
+
+                    # Capture original filename before saving
+                    original_filename = video_file.name if hasattr(video_file, 'name') else f'unknown_{i}.mp4'
 
                     # Save video file to disk
                     video_filename = f'view{i}.mp4'
@@ -1758,6 +1762,12 @@ class TaskViewSet(viewsets.GenericViewSet, mixins.ListModelMixin,
                     # Extract video metadata using FFmpeg
                     metadata = self._extract_video_metadata(video_path)
                     video_metadata_list.append(metadata)
+
+                    # Store original file metadata
+                    original_files[f'view{i}'] = {
+                        'filename': original_filename,
+                        'size': video_file.size if hasattr(video_file, 'size') else 0,
+                    }
 
                     # Create Video object with actual path and metadata
                     video_obj = models.Video.objects.create(
@@ -1775,6 +1785,7 @@ class TaskViewSet(viewsets.GenericViewSet, mixins.ListModelMixin,
                     'part_number': int(part_number),
                     'view_count': view_count,
                     'video_view1': video_objects['video_view1'],
+                    'original_files': original_files,  # Include original file metadata
                 }
                 # Add optional views (2-10) if provided
                 for i in range(2, view_count + 1):

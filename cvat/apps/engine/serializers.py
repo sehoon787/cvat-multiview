@@ -2972,11 +2972,11 @@ class PluginsSerializer(serializers.Serializer):
 class MultiviewDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.MultiviewData
-        fields = ['id', 'session_id', 'part_number', 'view_count',
+        fields = ['id', 'session_id', 'part_number', 'view_count', 'original_files',
                   'video_view1', 'video_view2', 'video_view3',
                   'video_view4', 'video_view5', 'video_view6',
                   'video_view7', 'video_view8', 'video_view9', 'video_view10']
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'original_files']
 
 class DataMetaReadSerializer(serializers.ModelSerializer):
     frames = FrameMetaSerializer(many=True, allow_null=True)

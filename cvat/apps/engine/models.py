@@ -452,6 +452,10 @@ class MultiviewData(models.Model):
     session_id = models.CharField(max_length=64)
     part_number = models.IntegerField()
 
+    # Original file metadata for each view
+    # Structure: {"view1": {"filename": "camera1.mp4", "path": "/original/path"}, ...}
+    original_files = models.JSONField(default=dict, blank=True)
+
     class Meta:
         default_permissions = ()
 

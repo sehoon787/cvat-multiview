@@ -858,18 +858,32 @@ class JobData(CommonData):
             multiview_data = self._db_data.multiview_data
             if multiview_data:
                 views = []
-                for i in range(1, 6):
+                view_count = getattr(multiview_data, 'view_count', 5) or 5
+                original_files = getattr(multiview_data, 'original_files', {}) or {}
+
+                for i in range(1, view_count + 1):
                     video = getattr(multiview_data, f'video_view{i}', None)
                     if video:
+                        view_key = f'view{i}'
+                        original_info = original_files.get(view_key, {})
+
+                        # Fallback: if original_filename is not in original_files,
+                        # use video.path basename (for existing tasks without original_files data)
+                        original_filename = original_info.get('filename', '')
+                        if not original_filename and video.path:
+                            original_filename = osp.basename(video.path)
+
                         views.append(("view", {
                             "id": str(i),
                             "video_path": osp.basename(video.path) if video.path else f'view{i}.mp4',
+                            "original_filename": original_filename,
                             "width": str(video.width),
                             "height": str(video.height),
                         }))
                 self._meta["multiview"] = {
                     "session_id": multiview_data.session_id or '',
                     "part_number": str(multiview_data.part_number) if multiview_data.part_number else '',
+                    "view_count": str(view_count),
                     "views": views,
                 }
         except (AttributeError, ObjectDoesNotExist):

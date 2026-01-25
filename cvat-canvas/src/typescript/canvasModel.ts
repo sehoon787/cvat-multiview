@@ -383,6 +383,7 @@ export class CanvasModelImpl extends MasterImpl implements CanvasModel {
         selected: any;
         mode: Mode;
         exception: Error | null;
+        setupCalled: boolean;
     };
 
     public constructor() {
@@ -453,6 +454,7 @@ export class CanvasModelImpl extends MasterImpl implements CanvasModel {
             selected: null,
             mode: Mode.IDLE,
             exception: null,
+            setupCalled: false,
             ...defaultData,
         };
     }
@@ -498,6 +500,24 @@ export class CanvasModelImpl extends MasterImpl implements CanvasModel {
     }
 
     public fitCanvas(width: number, height: number): void {
+        // Validate dimensions to prevent coordinate mismatch issues
+        if (width <= 0 || height <= 0) {
+            console.warn('[CanvasModel.fitCanvas] Invalid dimensions:', { width, height });
+            return;
+        }
+
+        // Warn if fitCanvas is called before setup() with no valid imageSize
+        // This can cause coordinate mismatch because imageOffset will be calculated
+        // from canvasSize (small display container) instead of imageSize (actual video dimensions)
+        if (!this.data.setupCalled &&
+            (this.data.imageSize.width <= 0 || this.data.imageSize.height <= 0)) {
+            console.warn(
+                '[CanvasModel.fitCanvas] Called before setup() with no valid imageSize - ' +
+                'may cause coordinate mismatch. Current imageSize:',
+                this.data.imageSize,
+            );
+        }
+
         this.data.canvasSize.height = height;
         this.data.canvasSize.width = width;
 
@@ -563,6 +583,8 @@ export class CanvasModelImpl extends MasterImpl implements CanvasModel {
     }
 
     public setup(frameData: any, objectStates: any[], zLayer: number): void {
+        this.data.setupCalled = true;
+
         if (this.data.imageID !== frameData.number) {
             if ([Mode.EDIT, Mode.DRAG, Mode.RESIZE].includes(this.data.mode)) {
                 throw Error(`Canvas is busy. Action: ${this.data.mode}`);
@@ -1066,6 +1088,7 @@ export class CanvasModelImpl extends MasterImpl implements CanvasModel {
         this.data = {
             ...this.data,
             ...defaultData,
+            setupCalled: false,
         };
         this.notify(UpdateReasons.CANCEL);
     }
