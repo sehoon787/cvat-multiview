@@ -27,6 +27,7 @@ export default function SpectrogramPanel(props: Props): JSX.Element {
     const { audioEngine: externalEngine, onEngineReady } = props;
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
     const spectrogramImageRef = useRef<ImageData | null>(null);
 
     const [audioEngine, setAudioEngine] = useState<MultiviewAudioEngine | null>(externalEngine);
@@ -186,29 +187,27 @@ export default function SpectrogramPanel(props: Props): JSX.Element {
     };
 
     /**
-     * Draw playhead marker on the spectrogram
+     * Draw playhead marker on the overlay canvas
+     * This is called from requestAnimationFrame for smooth 60fps updates
      */
-    const drawPlayhead = useCallback((): void => {
-        const canvas = canvasRef.current;
-        if (!canvas || !spectrogramImageRef.current) return;
+    const drawPlayheadOnly = useCallback((time: number): void => {
+        const overlay = overlayCanvasRef.current;
+        const mainCanvas = canvasRef.current;
+        if (!overlay || !mainCanvas) return;
 
-        const ctx = canvas.getContext('2d');
+        const ctx = overlay.getContext('2d');
         if (!ctx) return;
 
-        const { width, height } = canvas;
+        const { width, height } = overlay;
 
-        // Restore the spectrogram image
-        ctx.putImageData(spectrogramImageRef.current, 0, 0);
-
-        // Redraw labels (they get overwritten by putImageData)
-        drawTimeLabels(ctx, width, height);
-        drawFrequencyLabels(ctx, width, height);
+        // Clear overlay canvas
+        ctx.clearRect(0, 0, width, height);
 
         // Draw playhead marker (vertical red line)
         if (duration > 0) {
             // Round to nearest pixel and add 0.5 to align stroke to pixel boundaries
             // This prevents jitter/trembling caused by anti-aliasing at sub-pixel positions
-            const markerX = Math.round((currentTime / duration) * width) + 0.5;
+            const markerX = Math.round((time / duration) * width) + 0.5;
 
             ctx.strokeStyle = '#ff4d4d';
             ctx.lineWidth = 2;
@@ -221,13 +220,21 @@ export default function SpectrogramPanel(props: Props): JSX.Element {
             ctx.fillStyle = 'rgba(255, 77, 77, 0.95)';
             ctx.font = 'bold 12px monospace';
             ctx.textAlign = 'center';
-            const timeLabel = currentTime < 60
-                ? `${currentTime.toFixed(2)}s`
-                : `${Math.floor(currentTime / 60)}:${(currentTime % 60).toFixed(1).padStart(4, '0')}`;
+            const timeLabel = time < 60
+                ? `${time.toFixed(2)}s`
+                : `${Math.floor(time / 60)}:${(time % 60).toFixed(1).padStart(4, '0')}`;
             const labelX = Math.max(30, Math.min(markerX, width - 30));
             ctx.fillText(timeLabel, labelX, 15);
         }
-    }, [currentTime, duration, audioEngine]);
+    }, [duration]);
+
+    /**
+     * Draw playhead marker (legacy method for non-playing state)
+     * Uses frameNumber-based currentTime
+     */
+    const drawPlayhead = useCallback((): void => {
+        drawPlayheadOnly(currentTime);
+    }, [currentTime, drawPlayheadOnly]);
 
     // Draw spectrogram when data changes
     useEffect(() => {
@@ -236,12 +243,37 @@ export default function SpectrogramPanel(props: Props): JSX.Element {
         }
     }, [spectrogramData, drawSpectrogram]);
 
-    // Update playhead position when frame changes
+    // Update playhead position when frame changes (paused state)
     useEffect(() => {
-        if (spectrogramData && spectrogramImageRef.current) {
+        // Only update from frameNumber when not playing
+        // During playback, requestAnimationFrame handles the updates
+        if (spectrogramData && !playing) {
             drawPlayhead();
         }
-    }, [frameNumber, spectrogramData, drawPlayhead]);
+    }, [frameNumber, spectrogramData, drawPlayhead, playing]);
+
+    // Smooth playhead animation using requestAnimationFrame during playback
+    useEffect(() => {
+        if (!playing || !spectrogramData) return;
+
+        let animationId: number;
+        // Get the primary video element to read currentTime directly
+        const primaryVideo = document.querySelector('.multiview-video') as HTMLVideoElement;
+
+        const animate = (): void => {
+            if (primaryVideo && !primaryVideo.paused) {
+                drawPlayheadOnly(primaryVideo.currentTime);
+            }
+            animationId = requestAnimationFrame(animate);
+        };
+
+        // Start animation loop
+        animationId = requestAnimationFrame(animate);
+
+        return () => {
+            cancelAnimationFrame(animationId);
+        };
+    }, [playing, spectrogramData, drawPlayheadOnly]);
 
     /**
      * Handle canvas click for seeking
@@ -392,18 +424,38 @@ export default function SpectrogramPanel(props: Props): JSX.Element {
             </div>
 
             <div className='spectrogram-content'>
-                <canvas
-                    ref={canvasRef}
-                    className='spectrogram-canvas'
-                    width={1920}
-                    height={180}
-                    onClick={handleCanvasClick}
+                <div
+                    className='spectrogram-canvas-container'
                     style={{
-                        cursor: spectrogramData ? 'pointer' : 'default',
+                        position: 'relative',
                         display: isLoading ? 'none' : 'block',
                     }}
-                    title='Click to seek'
-                />
+                >
+                    <canvas
+                        ref={canvasRef}
+                        className='spectrogram-canvas'
+                        width={1920}
+                        height={180}
+                        style={{
+                            cursor: spectrogramData ? 'pointer' : 'default',
+                        }}
+                        title='Click to seek'
+                    />
+                    <canvas
+                        ref={overlayCanvasRef}
+                        className='spectrogram-overlay'
+                        width={1920}
+                        height={180}
+                        onClick={handleCanvasClick}
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            cursor: spectrogramData ? 'pointer' : 'default',
+                        }}
+                        title='Click to seek'
+                    />
+                </div>
 
                 {isLoading && (
                     <div className='spectrogram-loading'>
