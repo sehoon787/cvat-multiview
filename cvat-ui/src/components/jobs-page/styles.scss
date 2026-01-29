@@ -15,15 +15,11 @@
             display: flex;
             justify-content: space-between;
 
-            > div {
+            > .cvat-jobs-page-filters-wrapper {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 width: 100%;
-
-                .cvat-jobs-page-search-bar {
-                    width: $grid-unit-size * 32;
-                }
 
                 > div {
                     > *:not(:last-child) {
@@ -31,9 +27,24 @@
                     }
 
                     display: flex;
+                    margin-right: $grid-unit-size * 4;
+                }
+
+                .cvat-jobs-page-search-bar {
+                    width: $grid-unit-size * 32;
                 }
             }
         }
+    }
+
+    .cvat-jobs-page-actions {
+        display: flex;
+        align-items: center;
+        gap: $grid-unit-size;
+    }
+
+    .cvat-export-jobs-button {
+        margin-right: $grid-unit-size;
     }
 
     .cvat-empty-jobs-list {

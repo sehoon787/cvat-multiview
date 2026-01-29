@@ -100,6 +100,7 @@ function JobsPageComponent(): JSX.Element {
                 query={updatedQuery}
                 selectedCount={selectedCount}
                 onSelectAll={onSelectAll}
+                jobs={currentJobs}
                 onApplySearch={(search: string | null) => {
                     dispatch(
                         getJobsAsync({

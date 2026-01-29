@@ -114,6 +114,9 @@ function BulkWrapper(props: Readonly<BulkWrapperProps>): JSX.Element {
             const keepClasses = [
                 'ant-dropdown',
                 'rc-virtual-list',
+                'cvat-export-tasks-button',
+                'cvat-export-jobs-button',
+                'cvat-requests-download-button',
             ];
             const hasKeepClass = keepClasses.some((cls) => target.classList.contains(cls) || target.closest(`.${cls}`));
             if (hasKeepClass) {
@@ -238,10 +241,24 @@ function BulkWrapper(props: Readonly<BulkWrapperProps>): JSX.Element {
                     }
                 }
 
-                // Regular click: reset selection
-                dispatch(selectionActions.clearSelectedResources());
-                lastSelectedIndexRef.current = null;
-                return false;
+                // Regular click: toggle selection (add/remove without clearing others)
+                updateResources(
+                    [resourceId],
+                    isSelected ?
+                        (ids) => selectionActions.deselectResources(ids, resourceType) :
+                        (ids) => selectionActions.selectResources(ids, resourceType),
+                );
+
+                if (isSelected) {
+                    // Deselected - clear lastSelectedIndex if no items left
+                    if (selectedIds.length === 1) {
+                        lastSelectedIndexRef.current = null;
+                    }
+                    return false;
+                }
+
+                lastSelectedIndexRef.current = idx;
+                return true;
             },
         };
     };
