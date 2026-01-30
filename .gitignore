@@ -10,3 +10,4 @@ CLAUDE.md
 **/node_modules/
 **/__pycache__/
 /.playwright-mcp/
+docker-compose.override.yml
