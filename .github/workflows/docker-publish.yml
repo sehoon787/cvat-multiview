@@ -29,13 +29,11 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  SERVER_IMAGE: ghcr.io/kuielab/cvat-multiview-server
-  UI_IMAGE: ghcr.io/kuielab/cvat-multiview-ui
+  SERVER_IMAGE: ghcr.io/sehoon787/cvat-multiview-server
+  UI_IMAGE: ghcr.io/sehoon787/cvat-multiview-ui
 
 jobs:
   build-and-push:
-    # kuielab 저장소에서만 실행
-    if: github.repository == 'kuielab/cvat-multiview'
     runs-on: ubuntu-latest
     permissions:
       contents: read
